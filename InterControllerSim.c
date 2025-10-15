@@ -45,7 +45,6 @@ int main(int argc, char *argv[])
         return -2;
     }
     
-    Interruption currentInteruption;
     while (access(FIFO, F_OK) == -1)
     {
         sleep(0.5);
