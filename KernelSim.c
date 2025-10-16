@@ -35,7 +35,6 @@ int main(void)
     {
         //descobrir como checar se foi criado ou nao
         //trat
-        execlp("./AplicationProcess", sharedMemIds[i]);
     }
     else
     {
@@ -56,6 +55,7 @@ int RoundRobinScheduling()
     
     currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
 
+    //Run next process in line
     currentProcessData = sharedMemPtr[currentRunningProcess];
     kill(currentProcessData->pid, SIGCONT);
     currentProcessData->status = READY;
