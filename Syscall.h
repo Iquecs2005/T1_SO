@@ -3,3 +3,10 @@
 #define R 1
 #define W 2
 #define X 3
+
+typedef struct syscall SysCall;
+struct SysCall
+{
+    int device;
+    int operation;
+};

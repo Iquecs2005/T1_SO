@@ -8,7 +8,7 @@
 
 #include "Interruptions.h"
 
-#define OPENMODE (O_RDONLY | O_NONBLOCK)
+#define OPENMODE (O_WRONLY)
 #define FIFO "Interuptions"
 #define True 1
 #define False 0
@@ -73,6 +73,6 @@ int main(int argc, char *argv[])
 void GenerateInterruption(int device)
 {   
     Interruption currentInteruption;
-    currentInteruption.device = IRQ2;
+    currentInteruption.device = device;
     write(fpFIFO, &currentInteruption, sizeof(Interruption));
 }
