@@ -1,18 +1,21 @@
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/shm.h>
 
 #include "Syscall.h"
+#include "ProcessData.h"
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "SysCalls"
 #define MAX 5
 
-static int KernelPID;
+static ProcessData* processData;
 static int fpFIFO;
-
-int PC = 0;
-int Dx;
-int Op;
 
 void generateSysCall(int device, int mode);
 
@@ -20,21 +23,26 @@ int main(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        perror("No KernelPID in program call\n");
+        perror("No PID in program call\n");
         return -1;
     }
 
-    sscanf(argv[1], "%d", &KernelPID);
+    int processPid;
+    sscanf(argv[1], "%d", &processPid);
+
+    //Anexa a memoria compartilhada criada pelo nucleo contendo as informações do processo
+    void* sharedMemPointer = shmat(processPid, NULL, NULL);
+    if (sharedMemPointer == -1)
+    {
+        perror("Couldn't open shared memory");
+        exit(1);
+    }
+    processData = (ProcessData*) sharedMemPointer;
 
     if (access(FIFO, F_OK) == -1)
     {
-        int error;
-        if (error = mkfifo (FIFO, S_IRUSR | S_IWUSR) != 0)
-        {
-            fprintf (stderr, "Erro ao criar FIFO %s %d\n", FIFO, error);
-            perror("mkfifo failed");
-            return -1;
-        }
+        fprintf (stderr, "Erro: FIFO de SystemCalls não pode ser acessada\n");
+        return -1;
     }
 
     if ((fpFIFO = open (FIFO, OPENMODE)) < 0)
@@ -43,19 +51,26 @@ int main(int argc, char *argv[])
         return -2;
     }
 
-    while (PC < MAX)
+    while (processData->programCounter < MAX)
     {
-        PC++;
         sleep(0.5);
         // generate a random syscall
-        if (int d = rand()%100 +1 < 15) 
+        int d;
+        if (d = rand()%100 +1 < 15) 
         { 
+            int Dx;
+            int Op;
             if (d % 2) Dx = D1;
             else Dx= D2;
             if (d % 3 == 1) Op = R;
-            else if (d % 3 = 1) Op = W;
+            else if (d % 3 == 2) Op = W;
             else Op = X;
-            generateSysCall(Dx, Op)
+            processData->programCounter++;
+            generateSysCall(Dx, Op);
+        }
+        else
+        {
+            processData->programCounter++;
         }
         sleep(0.5);
     }
@@ -67,4 +82,6 @@ void generateSysCall(int device, int operation)
     currentSysCall.device = device;
     currentSysCall.operation = operation;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(processData->kernelPid, SIGUSR2);
+    pause();
 }

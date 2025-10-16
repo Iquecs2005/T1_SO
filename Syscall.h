@@ -5,7 +5,7 @@
 #define X 3
 
 typedef struct syscall SysCall;
-struct SysCall
+struct syscall
 {
     int device;
     int operation;
