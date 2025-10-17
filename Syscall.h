@@ -7,6 +7,7 @@
 typedef struct syscall SysCall;
 struct syscall
 {
+    int id;
     int device;
     int operation;
 };

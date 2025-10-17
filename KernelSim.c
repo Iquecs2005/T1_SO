@@ -1,22 +1,37 @@
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/shm.h>
 
 #include "ProcessData.h"
+#include "Interruptions.h"
+#include "Syscall.h"
 
-#define OPENMODESYS (O_RDONLY)
+#define OPENMODESYS (O_RDONLY | O_NONBLOCK)
 #define FIFOSYS "SysCalls"
-#define OPENMODEINT (O_RDONLY)
+#define OPENMODEINT (O_RDONLY | O_NONBLOCK)
 #define FIFOINT "Interuptions"
 #define NUM_AP 5
 
+#define True 1
+#define False 0
+
+static int fpSysFifo;
+static int fpIntFifo;
+
 int sharedMemIds[NUM_AP];
-ProcessData sharedMemPtr[NUM_AP];
+ProcessData* sharedMemPtr[NUM_AP];
 int currentRunningProcess = 0;
 
+int RoundRobinScheduling();
+int AlocateProcessMemory(int i);
+int CreateProcess(int i);
+void ContinueCurrentProcess();
+void StopCurrentProcess();
 void interruptionHandler();
 void syscallHandler();
 
@@ -26,39 +41,89 @@ int main(void)
     signal(SIGUSR1, interruptionHandler);
     signal(SIGUSR2, syscallHandler);
 
+    if (access(FIFOSYS, F_OK) == -1)
+    {
+        int error;
+        if (error = mkfifo (FIFOSYS, S_IRUSR | S_IWUSR) != 0)
+        {
+            fprintf (stderr, "Erro ao criar FIFO %s %d\n", FIFOSYS, error);
+            perror("mkfifo failed");
+            return -1;
+        }
+    }
+
+    if (access(FIFOINT, F_OK) == -1)
+    {
+        int error;
+        if (error = mkfifo (FIFOINT, S_IRUSR | S_IWUSR) != 0)
+        {
+            fprintf (stderr, "Erro ao criar FIFO %s %d\n", FIFOINT, error);
+            perror("mkfifo failed");
+            return -1;
+        }
+    }
+
+    if ((fpSysFifo = open (FIFOSYS, OPENMODESYS)) < 0)
+    {
+        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOSYS);
+        return -2;
+    }
+
+    if ((fpIntFifo = open (FIFOINT, OPENMODEINT)) < 0)
+    {
+        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOINT);
+        return -2;
+    }
+
     for (int i = 0; i < NUM_AP; i++) 
     {
         sharedMemIds[i] = -1; 
     }
 
-    if(pid == 0)
+    //Create InterControllerSim process
+    if (fork() == 0)
     {
-        //descobrir como checar se foi criado ou nao
-        //trat
+        char number[81];
+        sprintf(number, "%d", getpid());
+        execlp("./InterControllerSim", number, NULL);
     }
-    else
-    {
-        //kernell vai rodar comecando do primeiro entao ele vai checar se foi criado e permitir que vai rodar
-        //capturar interrupcoes e chamadas do sistema, chamada do sistema faz
-    }
+
+    RoundRobinScheduling();
+    pause();
+
+    close(fpSysFifo);
+    close(fpIntFifo);
+
     return 0;
 }
 
 int RoundRobinScheduling()
 {
+    StopCurrentProcess();
+
+    //Search the Run next process in line
     ProcessData* currentProcessData;
+    for (int i = 0; i < NUM_AP; i++)
+    {   
+        if (sharedMemIds[currentRunningProcess] == -1)
+        {
+            CreateProcess(currentRunningProcess);
+            return 1;
+        }
 
-    //Stop current process from running
-    currentProcessData = sharedMemPtr[currentRunningProcess];
-    kill(currentProcessData->pid, SIGSTOP);
-    currentProcessData->status = READY;
-    
-    currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
+        currentProcessData = sharedMemPtr[currentRunningProcess];
+        
+        if (currentProcessData->status == READY)
+        {
+            kill(currentProcessData->pid, SIGCONT);
+            currentProcessData->status = RUNNING;
+            return 0;
+        }
 
-    //Run next process in line
-    currentProcessData = sharedMemPtr[currentRunningProcess];
-    kill(currentProcessData->pid, SIGCONT);
-    currentProcessData->status = READY;
+        currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
+    }
+
+    return -1;
 }
 
 int AlocateProcessMemory(int i)
@@ -87,17 +152,67 @@ int CreateProcess(int i)
     pid_t pid = fork();
     if (pid == 0)
     {
-        execlp("./AplicationProcess", sharedMemIds[i]);
+        char number[81];
+        sprintf(number, "%d", sharedMemIds[i]);
+        execlp("./AplicationProcess", number, NULL);
     }
     sharedMemPtr[i]->pid = pid;
-    pc->status = RUNNING;
+    sharedMemPtr[i]->status = RUNNING;
 
     return sharedMemIds[i];
+}
+
+void ContinueCurrentProcess()
+{
+    //Stop current process from running
+    ProcessData* currentProcessData;
+    currentProcessData = sharedMemPtr[currentRunningProcess];
+
+    if (currentProcessData->status == READY)
+    {
+        kill(currentProcessData->pid, SIGCONT);
+        currentProcessData->status = RUNNING;
+        return;
+    }
+
+    fprintf (stderr, "No running Process\n");
+}
+
+void StopCurrentProcess()
+{
+    //Stop current process from running
+    ProcessData* currentProcessData;
+    if (sharedMemIds[currentRunningProcess] != -1)
+    {
+        currentProcessData = sharedMemPtr[currentRunningProcess];
+        if (currentProcessData->status == RUNNING)
+        {
+            kill(currentProcessData->pid, SIGSTOP);
+            currentProcessData->status = READY;
+        }
+        
+        currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
+    }
 }
 
 void interruptionHandler()
 {
     //ler o tipo de interrupcao da FIFO de interrupcao e rodar o proximo AP na fila de espera do device na interrupcao gerada
+    StopCurrentProcess();
+
+    Interruption interuption;
+    char clockInterruption;
+    while (read(fpIntFifo, &interuption, sizeof(Interruption)) > 0)
+    {
+        if (interuption.device == IRQ0)
+            clockInterruption = True;
+    }
+
+    if (clockInterruption)
+        RoundRobinScheduling();
+    else
+        ContinueCurrentProcess();
+
     return;
 }
 

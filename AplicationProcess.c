@@ -79,6 +79,7 @@ int main(int argc, char *argv[])
 void generateSysCall(int device, int operation)
 {
     SysCall currentSysCall;
+    currentSysCall.id = processData->memoryId;
     currentSysCall.device = device;
     currentSysCall.operation = operation;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
