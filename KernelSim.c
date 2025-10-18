@@ -6,6 +6,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/shm.h>
+#include <sys/wait.h>
 
 #include "ProcessData.h"
 #include "Interruptions.h"
@@ -27,6 +28,7 @@ static int kernelPID;
 int sharedMemIds[NUM_AP];
 ProcessData* sharedMemPtr[NUM_AP];
 int currentRunningProcess = 0;
+int nChild = NUM_AP;
 
 int RoundRobinScheduling();
 int AlocateProcessMemory(int i);
@@ -35,6 +37,7 @@ void ContinueCurrentProcess();
 void StopCurrentProcess();
 void interruptionHandler();
 void syscallHandler();
+void sigchildHandler();
 
 //TODO: criar as filas para D1 e D2
 int main(void)
@@ -43,6 +46,7 @@ int main(void)
 
     signal(SIGUSR1, interruptionHandler);
     signal(SIGUSR2, syscallHandler);
+    signal(SIGCHLD, sigchildHandler);
 
     if (access(FIFOSYS, F_OK) == -1)
     {
@@ -106,7 +110,7 @@ int RoundRobinScheduling()
     StopCurrentProcess();
     
     currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
-
+    
     //Search the Run next process in line
     ProcessData* currentProcessData;
     for (int i = 0; i < NUM_AP; i++)
@@ -228,5 +232,29 @@ void interruptionHandler()
 void syscallHandler()
 {
     //avisa o kernel que o AP precisa ser colocado na fila de espera do device que requisitou
+    return;
+}
+
+void sigchildHandler()
+{
+    int status;
+    pid_t child_pid = waitpid(-1, &status, WNOHANG);
+
+    if (child_pid > 0) 
+    {
+        nChild--;
+        printf("Child process %d exited\n", child_pid);
+        if (nChild > 0)
+        {
+            sharedMemPtr[currentRunningProcess]->status = FINISHED;
+            RoundRobinScheduling();
+        }
+        else
+        {
+            printf("No more children\n");
+            exit(0);
+        }
+    }
+
     return;
 }

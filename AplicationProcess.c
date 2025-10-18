@@ -12,7 +12,7 @@
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "SysCalls"
-#define MAX 1000
+#define MAX 2
 
 static ProcessData* processData;
 static int fpFIFO;
