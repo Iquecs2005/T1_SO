@@ -22,6 +22,7 @@
 
 static int fpSysFifo;
 static int fpIntFifo;
+static int kernelPID;
 
 int sharedMemIds[NUM_AP];
 ProcessData* sharedMemPtr[NUM_AP];
@@ -38,6 +39,8 @@ void syscallHandler();
 //TODO: criar as filas para D1 e D2
 int main(void)
 {
+    kernelPID = getpid();
+
     signal(SIGUSR1, interruptionHandler);
     signal(SIGUSR2, syscallHandler);
 
@@ -51,7 +54,7 @@ int main(void)
             return -1;
         }
     }
-
+    
     if (access(FIFOINT, F_OK) == -1)
     {
         int error;
@@ -62,34 +65,35 @@ int main(void)
             return -1;
         }
     }
-
+    
     if ((fpSysFifo = open (FIFOSYS, OPENMODESYS)) < 0)
     {
         fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOSYS);
         return -2;
     }
-
+    
     if ((fpIntFifo = open (FIFOINT, OPENMODEINT)) < 0)
     {
         fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOINT);
         return -2;
     }
-
+    
     for (int i = 0; i < NUM_AP; i++) 
     {
         sharedMemIds[i] = -1; 
     }
-
+    
     //Create InterControllerSim process
     if (fork() == 0)
     {
         char number[81];
-        sprintf(number, "%d", getpid());
-        execlp("./InterControllerSim", number, NULL);
+        sprintf(number, "%d", kernelPID);
+        execlp("./InterControllerSim", "./InterControllerSim", number, NULL);
     }
-
+    
     RoundRobinScheduling();
-    pause();
+    while (True)
+        pause();
 
     close(fpSysFifo);
     close(fpIntFifo);
@@ -100,6 +104,8 @@ int main(void)
 int RoundRobinScheduling()
 {
     StopCurrentProcess();
+    
+    currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
 
     //Search the Run next process in line
     ProcessData* currentProcessData;
@@ -115,6 +121,7 @@ int RoundRobinScheduling()
         
         if (currentProcessData->status == READY)
         {
+            printf("Ready\n");
             kill(currentProcessData->pid, SIGCONT);
             currentProcessData->status = RUNNING;
             return 0;
@@ -128,7 +135,7 @@ int RoundRobinScheduling()
 
 int AlocateProcessMemory(int i)
 {
-    if (sharedMemIds[i] == -1)
+    if (sharedMemIds[i] != -1)
     {
         return -1;
     }
@@ -138,7 +145,7 @@ int AlocateProcessMemory(int i)
     ProcessData* pc =  sharedMemPtr[i];
     pc->pid = -1;
     pc->memoryId = sharedMemIds[i];
-    pc->kernelPid = getpid();
+    pc->kernelPid = kernelPID;
     pc->status = NEW;
     pc->programCounter = 0;
 
@@ -148,13 +155,13 @@ int AlocateProcessMemory(int i)
 int CreateProcess(int i)
 {
     AlocateProcessMemory(i);
-
-    pid_t pid = fork();
+    
+    int pid = fork();
     if (pid == 0)
     {
         char number[81];
         sprintf(number, "%d", sharedMemIds[i]);
-        execlp("./AplicationProcess", number, NULL);
+        execlp("./AplicationProcess", "./AplicationProcess", number, NULL);
     }
     sharedMemPtr[i]->pid = pid;
     sharedMemPtr[i]->status = RUNNING;
@@ -165,6 +172,7 @@ int CreateProcess(int i)
 void ContinueCurrentProcess()
 {
     //Stop current process from running
+    printf("continue\n");
     ProcessData* currentProcessData;
     currentProcessData = sharedMemPtr[currentRunningProcess];
 
@@ -190,8 +198,6 @@ void StopCurrentProcess()
             kill(currentProcessData->pid, SIGSTOP);
             currentProcessData->status = READY;
         }
-        
-        currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
     }
 }
 
@@ -209,7 +215,10 @@ void interruptionHandler()
     }
 
     if (clockInterruption)
+    {
+        printf("ClockInterruption\n");
         RoundRobinScheduling();
+    }
     else
         ContinueCurrentProcess();
 

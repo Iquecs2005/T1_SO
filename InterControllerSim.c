@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
     }
 
     sscanf(argv[1], "%d", &KernelPID);
-
+    
     if (access(FIFO, F_OK) == -1)
     {
         int error;
@@ -38,32 +38,32 @@ int main(int argc, char *argv[])
             return -1;
         }
     }
-
+    
     if ((fpFIFO = open (FIFO, OPENMODE)) < 0)
     {
         fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFO);
         return -2;
     }
     
-    while (access(FIFO, F_OK) == -1)
+    while (access(FIFO, F_OK) != -1)
     {
-        sleep(0.5);
-
+        sleep(1);
+        
         //Generate IRQ0 / Time Slice
         GenerateInterruption(IRQ0);
-
+        
         if ((rand() % 100) + 1 < 10)
         {
             //Generate IRQ1
             GenerateInterruption(IRQ1);
         }
-
+        
         if ((rand() % 100) + 1 < 5)
         {
             //Generate IRQ2
             GenerateInterruption(IRQ2);
         }
-
+        
         kill(KernelPID, SIGUSR1);
     }
 

@@ -12,12 +12,13 @@
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "SysCalls"
-#define MAX 5
+#define MAX 1000
 
 static ProcessData* processData;
 static int fpFIFO;
 
 void generateSysCall(int device, int mode);
+void OnExecute();
 
 int main(int argc, char *argv[])
 {
@@ -53,7 +54,8 @@ int main(int argc, char *argv[])
 
     while (processData->programCounter < MAX)
     {
-        sleep(0.5);
+        printf("%d - %d\n", getpid(), processData->programCounter);
+        sleep(1);
         // generate a random syscall
         int d;
         if (d = rand()%100 +1 < 15) 
@@ -72,7 +74,6 @@ int main(int argc, char *argv[])
         {
             processData->programCounter++;
         }
-        sleep(0.5);
     }
 }
 
