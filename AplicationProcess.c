@@ -21,9 +21,12 @@ static int fpFIFO;
 
 void generateSysCall(int device, int mode);
 void OnExecute();
+void stopHandler();
 
 int main(int argc, char *argv[])
 {
+    signal(SIGINT, stopHandler);
+
     if (argc < 2)
     {
         perror("No PID in program call\n");
@@ -91,4 +94,9 @@ void generateSysCall(int device, int operation)
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
     kill(kernelPID, SIGUSR2);
     return;
+}
+
+void stopHandler() 
+{
+    
 }

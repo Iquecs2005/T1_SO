@@ -75,8 +75,7 @@ void GenerateInterruption(int device)
     }
 }
 
-void stopHandler()
+void stopHandler() 
 {
-    close(fpFIFO);
-    exit(0);
+    
 }

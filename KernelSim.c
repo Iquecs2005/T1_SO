@@ -29,6 +29,8 @@ struct pcb
     int pid;
     int status;
     int programCounter;
+    int device;
+    int operation;
 };
 
 static int fpSysFifo;
@@ -40,7 +42,7 @@ static int currentRunningProcess = -1;
 static int nChild = NUM_AP;
 static int interControllerPID = 0;
 
-static char ending = False;
+static char paused = False;
 
 static ProcessData* mainMemory;
 
@@ -60,7 +62,7 @@ void interruptionHandler();
 void syscallHandler();
 void sigchildHandler();
 void stopHandler();
-void CloseKernel();
+void continueHandler();
 
 int main(void)
 {
@@ -68,6 +70,7 @@ int main(void)
     signal(SIGUSR2, syscallHandler);
     signal(SIGCHLD, sigchildHandler);
     signal(SIGINT, stopHandler);
+    signal(SIGCONT, continueHandler);
 
     for (int i = 0; i < NUM_DV; i++)
     {
@@ -296,6 +299,8 @@ void syscallHandler()
 
     printf("System Call: %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.device);
     processPCBs[currentRunningProcess].status = BLOCKED;
+    processPCBs[currentRunningProcess].device = systemCall.device;
+    processPCBs[currentRunningProcess].operation = systemCall.operation;
 
     Enqueue(DevicesQueues[systemCall.device - 1], currentRunningProcess);
     RoundRobinScheduling();
@@ -305,7 +310,7 @@ void syscallHandler()
 
 void sigchildHandler()
 {
-    if (ending)
+    if (paused)
         return;
 
     int status;
@@ -323,7 +328,7 @@ void sigchildHandler()
         }
         else
         {
-            CloseKernel();
+            exit(0);
         }
     }
 
@@ -332,24 +337,85 @@ void sigchildHandler()
 
 void stopHandler()
 {
-    ending = True;
+    paused = True;
+
+    kill(interControllerPID, SIGSTOP);
+
+    if (currentRunningPid != -1)
+        kill(currentRunningPid, SIGSTOP);
+
+    printf("\n\nProcess status:\n\n");
     for (int i = 0; i < NUM_AP; i++)
     {
-        kill(processPCBs[i].pid, SIGKILL);
-    }
-    kill(interControllerPID, SIGKILL);
+        printf("Process %d\n", i);
+        char* message;
+        switch (processPCBs[i].status)
+        {
+        case NEW:
+            message = "New";
+            break;
+        case RUNNING:
+            message = "Running";
+            break;
+        case READY:
+            message = "Ready";
+            break;
+        case BLOCKED:
+            message = "Blocked";
+            break;
+        case FINISHED:
+            message = "Blocked";
+            break;
+        }
 
-    CloseKernel();
+        printf("Status: %s\n", message);
+        printf("Program Counter: %d\n", processPCBs[i].programCounter);
+
+        if (processPCBs[i].status == BLOCKED)
+        {
+            switch (processPCBs[i].device)
+            {
+            case D1:
+                message = "D1";
+                break;
+            case D2:
+                message = "D2";
+                break;
+            }
+            printf("Device: %s\n", message);
+
+            switch (processPCBs[i].operation)
+            {
+            case R:
+                message = "Read";
+                break;
+            case W:
+                message = "Write";
+                break;
+            case X:
+                message = "X";
+                break;
+            }
+
+            printf("Operation: %s\n", message);
+        }
+
+        printf("\n");
+    }
+
+    return;
 }
 
-void CloseKernel()
+void continueHandler()
 {
-    //Close FIFO
-    close(fpSysFifo);
-    close(fpIntFifo);
-    
-    //Close Shared Memory
-    shmctl(mainMemoryid, IPC_RMID, NULL);
-    
-    exit(0);
+    paused = False;
+
+    printf("Test\n");
+
+    kill(interControllerPID, SIGCONT);
+
+    if (currentRunningPid != -1)
+        kill(currentRunningPid, SIGCONT);
+
+    return;
 }
