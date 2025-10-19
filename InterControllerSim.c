@@ -11,8 +11,8 @@
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "Interuptions"
-#define D1PROB 10
-#define D2PROB 5
+#define D1PROB 20
+#define D2PROB 1
 
 static int KernelPID;
 static int fpFIFO;
