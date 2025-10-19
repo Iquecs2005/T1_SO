@@ -33,20 +33,19 @@ struct pcb
 
 static int fpSysFifo;
 static int fpIntFifo;
-static int kernelPID;
 
-int mainMemoryid;
-int currentRunningProcess = -1;
-int nChild = NUM_AP;
-int interControllerPID = 0;
+static int mainMemoryid;
+static int currentRunningProcess = -1;
+static int nChild = NUM_AP;
+static int interControllerPID = 0;
 
-char ending = False;
+static char ending = False;
 
-ProcessData* mainMemory;
+static ProcessData* mainMemory;
 
-PCB processPCBs[NUM_AP];
+static PCB processPCBs[NUM_AP];
 
-Queue* DevicesQueues[NUM_DV];
+static Queue* DevicesQueues[NUM_DV];
 
 int RoundRobinScheduling();
 void CreatePCB(int i);
@@ -63,8 +62,6 @@ void CloseKernel();
 
 int main(void)
 {
-    kernelPID = getpid();
-
     signal(SIGUSR1, interruptionHandler);
     signal(SIGUSR2, syscallHandler);
     signal(SIGCHLD, sigchildHandler);
@@ -242,7 +239,6 @@ void SaveContext()
 void LoadContext(int i)
 {
     //Load
-    mainMemory->kernelPid = getpid();
     mainMemory->memoryId = i;
     mainMemory->pid = processPCBs[i].pid;
     mainMemory->programCounter = processPCBs[i].programCounter;

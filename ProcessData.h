@@ -9,7 +9,6 @@ struct processData
 {
     int pid;
     int memoryId;
-    int kernelPid;
     int status;
     int programCounter;
 };

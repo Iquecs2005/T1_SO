@@ -10,8 +10,6 @@
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "Interuptions"
-#define True 1
-#define False 0
 #define D1PROB 10
 #define D2PROB 5
 
