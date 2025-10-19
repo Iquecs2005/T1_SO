@@ -12,9 +12,11 @@
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "SysCalls"
-#define MAX 2
+#define MAX 1000
+#define SYSCALLPROB 15
 
 static ProcessData* processData;
+static int kernelPID;
 static int fpFIFO;
 
 void generateSysCall(int device, int mode);
@@ -27,7 +29,8 @@ int main(int argc, char *argv[])
         perror("No PID in program call\n");
         return -1;
     }
-
+    
+    kernelPID = getppid();
     int processPid;
     sscanf(argv[1], "%d", &processPid);
 
@@ -54,16 +57,18 @@ int main(int argc, char *argv[])
 
     while (processData->programCounter < MAX)
     {
-        printf("%d - %d\n", getpid(), processData->programCounter);
         sleep(1);
         // generate a random syscall
         int d;
-        if (d = rand()%100 +1 < 15) 
+        if (d = (rand() % 100) + 1 < SYSCALLPROB) 
         { 
             int Dx;
-            int Op;
-            if (d % 2) Dx = D1;
-            else Dx= D2;
+            int Op;            
+            //if ((rand() % 100) + 1 < 51) 
+            if (d % 2)
+                Dx = D1;
+            else 
+                Dx= D2;
             if (d % 3 == 1) Op = R;
             else if (d % 3 == 2) Op = W;
             else Op = X;
@@ -84,6 +89,6 @@ void generateSysCall(int device, int operation)
     currentSysCall.device = device;
     currentSysCall.operation = operation;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
-    kill(processData->kernelPid, SIGUSR2);
-    pause();
+    kill(kernelPID, SIGUSR2);
+    return;
 }

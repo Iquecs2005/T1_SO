@@ -12,21 +12,20 @@
 #define FIFO "Interuptions"
 #define True 1
 #define False 0
+#define D1PROB 10
+#define D2PROB 5
 
 static int KernelPID;
 static int fpFIFO;
 
 void GenerateInterruption(int device);
+void stopHandler();
 
-int main(int argc, char *argv[])
+int main()
 {
-    if (argc < 2)
-    {
-        perror("No KernelPID in program call\n");
-        return -1;
-    }
+    signal(SIGINT, stopHandler);
 
-    sscanf(argv[1], "%d", &KernelPID);
+    KernelPID = getppid();
     
     if (access(FIFO, F_OK) == -1)
     {
@@ -52,13 +51,13 @@ int main(int argc, char *argv[])
         //Generate IRQ0 / Time Slice
         GenerateInterruption(IRQ0);
         
-        if ((rand() % 100) + 1 < 10)
+        if ((rand() % 100) + 1 < D1PROB)
         {
             //Generate IRQ1
             GenerateInterruption(IRQ1);
         }
         
-        if ((rand() % 100) + 1 < 5)
+        if ((rand() % 100) + 1 < D2PROB)
         {
             //Generate IRQ2
             GenerateInterruption(IRQ2);
@@ -66,13 +65,20 @@ int main(int argc, char *argv[])
         
         kill(KernelPID, SIGUSR1);
     }
-
-    close(fpFIFO);
 }
 
 void GenerateInterruption(int device)
 {   
     Interruption currentInteruption;
     currentInteruption.device = device;
-    write(fpFIFO, &currentInteruption, sizeof(Interruption));
+    if (write(fpFIFO, &currentInteruption, sizeof(Interruption)) < 0)
+    {
+        printf("Write error\n");
+    }
+}
+
+void stopHandler()
+{
+    close(fpFIFO);
+    exit(0);
 }

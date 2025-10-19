@@ -11,35 +11,56 @@
 #include "ProcessData.h"
 #include "Interruptions.h"
 #include "Syscall.h"
+#include "Queue.h"
 
 #define OPENMODESYS (O_RDONLY | O_NONBLOCK)
 #define FIFOSYS "SysCalls"
 #define OPENMODEINT (O_RDONLY | O_NONBLOCK)
 #define FIFOINT "Interuptions"
 #define NUM_AP 5
+#define NUM_DV 2
 
 #define True 1
 #define False 0
+
+typedef struct pcb PCB;
+struct pcb
+{
+    int pid;
+    int status;
+    int programCounter;
+};
 
 static int fpSysFifo;
 static int fpIntFifo;
 static int kernelPID;
 
-int sharedMemIds[NUM_AP];
-ProcessData* sharedMemPtr[NUM_AP];
-int currentRunningProcess = 0;
+int mainMemoryid;
+int currentRunningProcess = -1;
 int nChild = NUM_AP;
+int interControllerPID = 0;
+
+char ending = False;
+
+ProcessData* mainMemory;
+
+PCB processPCBs[NUM_AP];
+
+Queue* DevicesQueues[NUM_DV];
 
 int RoundRobinScheduling();
-int AlocateProcessMemory(int i);
-int CreateProcess(int i);
+void CreatePCB(int i);
+void CreateProcess(int i);
 void ContinueCurrentProcess();
 void StopCurrentProcess();
+void SaveContext();
+void LoadContext(int i);
 void interruptionHandler();
 void syscallHandler();
 void sigchildHandler();
+void stopHandler();
+void CloseKernel();
 
-//TODO: criar as filas para D1 e D2
 int main(void)
 {
     kernelPID = getpid();
@@ -47,6 +68,15 @@ int main(void)
     signal(SIGUSR1, interruptionHandler);
     signal(SIGUSR2, syscallHandler);
     signal(SIGCHLD, sigchildHandler);
+    signal(SIGINT, stopHandler);
+
+    for (int i = 0; i < NUM_DV; i++)
+    {
+        DevicesQueues[i] = CreateQueue();
+    }
+
+    mainMemoryid = shmget(IPC_PRIVATE, sizeof(ProcessData), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
+    mainMemory = shmat(mainMemoryid, 0, 0);
 
     if (access(FIFOSYS, F_OK) == -1)
     {
@@ -57,6 +87,7 @@ int main(void)
             perror("mkfifo failed");
             return -1;
         }
+        printf("Created Sys Fifo\n");
     }
     
     if (access(FIFOINT, F_OK) == -1)
@@ -68,6 +99,7 @@ int main(void)
             perror("mkfifo failed");
             return -1;
         }
+        printf("Created Int Fifo\n");
     }
     
     if ((fpSysFifo = open (FIFOSYS, OPENMODESYS)) < 0)
@@ -82,52 +114,54 @@ int main(void)
         return -2;
     }
     
+    mainMemory->pid = -1;
     for (int i = 0; i < NUM_AP; i++) 
     {
-        sharedMemIds[i] = -1; 
+        processPCBs[i].pid = -1; 
     }
     
     //Create InterControllerSim process
-    if (fork() == 0)
+    interControllerPID = fork();
+    if (interControllerPID == 0)
     {
-        char number[81];
-        sprintf(number, "%d", kernelPID);
-        execlp("./InterControllerSim", "./InterControllerSim", number, NULL);
+        execlp("./InterControllerSim", "./InterControllerSim", NULL);
     }
     
     RoundRobinScheduling();
     while (True)
         pause();
 
-    close(fpSysFifo);
-    close(fpIntFifo);
-
     return 0;
 }
 
 int RoundRobinScheduling()
 {
-    StopCurrentProcess();
-    
     currentRunningProcess = (currentRunningProcess + 1) % NUM_AP;
     
     //Search the Run next process in line
-    ProcessData* currentProcessData;
+    PCB currentProcessData;
     for (int i = 0; i < NUM_AP; i++)
     {   
-        if (sharedMemIds[currentRunningProcess] == -1)
+        currentProcessData = processPCBs[currentRunningProcess];
+
+        if (currentProcessData.pid == -1)
         {
             CreateProcess(currentRunningProcess);
+            currentProcessData = processPCBs[currentRunningProcess];
+            printf("Creating process %d\n", currentRunningProcess);
+            printf("Running process %d\n", currentProcessData.pid);
+            printf("PC: %d\n", currentProcessData.programCounter);
             return 1;
         }
 
-        currentProcessData = sharedMemPtr[currentRunningProcess];
-        
-        if (currentProcessData->status == READY)
+        if (currentProcessData.status == READY)
         {
-            printf("Ready\n");
-            kill(currentProcessData->pid, SIGCONT);
-            currentProcessData->status = RUNNING;
+            printf("Running process %d\n", currentProcessData.pid);
+            printf("PC: %d\n", currentProcessData.programCounter);
+            LoadContext(currentRunningProcess);
+            kill(currentProcessData.pid, SIGCONT);
+            mainMemory->pid = currentProcessData.pid;
+            processPCBs[currentRunningProcess].status = RUNNING;
             return 0;
         }
 
@@ -137,53 +171,45 @@ int RoundRobinScheduling()
     return -1;
 }
 
-int AlocateProcessMemory(int i)
+void CreatePCB(int i)
 {
-    if (sharedMemIds[i] != -1)
+    if (processPCBs[i].pid != -1)
     {
-        return -1;
+        return;
     }
 
-    sharedMemIds[i] = shmget(IPC_PRIVATE, sizeof(ProcessData), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
-    sharedMemPtr[i] = shmat(sharedMemIds[i], 0, 0);
-    ProcessData* pc =  sharedMemPtr[i];
-    pc->pid = -1;
-    pc->memoryId = sharedMemIds[i];
-    pc->kernelPid = kernelPID;
-    pc->status = NEW;
-    pc->programCounter = 0;
-
-    return sharedMemIds[i];
+    processPCBs[i].status = NEW;
+    processPCBs[i].programCounter = 0;
 }
 
-int CreateProcess(int i)
+void CreateProcess(int i)
 {
-    AlocateProcessMemory(i);
+    CreatePCB(i);
     
     int pid = fork();
     if (pid == 0)
     {
         char number[81];
-        sprintf(number, "%d", sharedMemIds[i]);
+        sprintf(number, "%d", mainMemoryid);
         execlp("./AplicationProcess", "./AplicationProcess", number, NULL);
     }
-    sharedMemPtr[i]->pid = pid;
-    sharedMemPtr[i]->status = RUNNING;
-
-    return sharedMemIds[i];
+    processPCBs[i].pid = pid;
+    processPCBs[i].status = RUNNING;
+    mainMemory->pid = pid;
+    mainMemory->status = RUNNING;
 }
 
 void ContinueCurrentProcess()
 {
     //Stop current process from running
     printf("continue\n");
-    ProcessData* currentProcessData;
-    currentProcessData = sharedMemPtr[currentRunningProcess];
-
-    if (currentProcessData->status == READY)
+    
+    PCB currentPCB = processPCBs[currentRunningProcess];
+    if (currentPCB.status == READY)
     {
-        kill(currentProcessData->pid, SIGCONT);
-        currentProcessData->status = RUNNING;
+        LoadContext(currentRunningProcess);
+        kill(currentPCB.pid, SIGCONT);
+        processPCBs[currentRunningProcess].status = RUNNING;
         return;
     }
 
@@ -193,16 +219,33 @@ void ContinueCurrentProcess()
 void StopCurrentProcess()
 {
     //Stop current process from running
-    ProcessData* currentProcessData;
-    if (sharedMemIds[currentRunningProcess] != -1)
-    {
-        currentProcessData = sharedMemPtr[currentRunningProcess];
-        if (currentProcessData->status == RUNNING)
-        {
-            kill(currentProcessData->pid, SIGSTOP);
-            currentProcessData->status = READY;
-        }
-    }
+    if (mainMemory->pid == -1)
+        return;
+
+    kill(mainMemory->pid, SIGSTOP);
+    SaveContext();
+}
+
+void SaveContext()
+{
+    if (mainMemory->pid == -1)
+        return;
+
+    PCB currentProcessData = processPCBs[mainMemory->memoryId];
+
+    //Save
+    processPCBs[currentRunningProcess].programCounter = mainMemory->programCounter;
+    processPCBs[currentRunningProcess].status = READY;
+    mainMemory->pid = -1;
+}
+
+void LoadContext(int i)
+{
+    //Load
+    mainMemory->kernelPid = getpid();
+    mainMemory->memoryId = i;
+    mainMemory->pid = processPCBs[i].pid;
+    mainMemory->programCounter = processPCBs[i].programCounter;
 }
 
 void interruptionHandler()
@@ -211,14 +254,41 @@ void interruptionHandler()
     StopCurrentProcess();
 
     Interruption interuption;
-    char clockInterruption;
-    while (read(fpIntFifo, &interuption, sizeof(Interruption)) > 0)
+    interuption.device = -1;
+    char interruptions[] = {False, False, False};
+
+    int readStatus = read(fpIntFifo, &interuption, sizeof(Interruption));
+
+    if (readStatus == -1)
+        printf("ReadError\n");
+
+    while (readStatus > 0)
     {
-        if (interuption.device == IRQ0)
-            clockInterruption = True;
+        interruptions[interuption.device] = True;
+        readStatus = read(fpIntFifo, &interuption, sizeof(Interruption));
     }
 
-    if (clockInterruption)
+    if (interruptions[1])
+    {
+        printf("D1 Interruption\n");
+        int id = pop(DevicesQueues[0]);
+        if (id != -1)
+        {
+            printf("id: %d pid: %d\n", id, processPCBs[id].pid);
+            processPCBs[id].status = READY;
+        }
+    }
+    if (interruptions[2])
+    {
+        printf("D2 Interruption\n");
+        int id = pop(DevicesQueues[1]);
+        if (id != -1)
+        {
+            printf("id: %d pid: %d\n", id, processPCBs[id].pid);
+            processPCBs[id].status = READY;
+        }
+    }
+    if (interruptions[0])
     {
         printf("ClockInterruption\n");
         RoundRobinScheduling();
@@ -231,30 +301,67 @@ void interruptionHandler()
 
 void syscallHandler()
 {
-    //avisa o kernel que o AP precisa ser colocado na fila de espera do device que requisitou
+    StopCurrentProcess();
+    
+    SysCall systemCall;
+    read(fpSysFifo, &systemCall, sizeof(SysCall));
+
+    printf("System Call: %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.device);
+    processPCBs[currentRunningProcess].status = BLOCKED;
+
+    Enqueue(DevicesQueues[systemCall.device - 1], currentRunningProcess);
+    RoundRobinScheduling();
+
     return;
 }
 
 void sigchildHandler()
 {
+    if (ending)
+        return;
+
     int status;
     pid_t child_pid = waitpid(-1, &status, WNOHANG);
-
+        
     if (child_pid > 0) 
     {
+        SaveContext();
         nChild--;
         printf("Child process %d exited\n", child_pid);
         if (nChild > 0)
         {
-            sharedMemPtr[currentRunningProcess]->status = FINISHED;
+            processPCBs[currentRunningProcess].status = FINISHED;
             RoundRobinScheduling();
         }
         else
         {
-            printf("No more children\n");
-            exit(0);
+            CloseKernel();
         }
     }
 
     return;
+}
+
+void stopHandler()
+{
+    ending = True;
+    for (int i = 0; i < NUM_AP; i++)
+    {
+        kill(processPCBs[i].pid, SIGKILL);
+    }
+    kill(interControllerPID, SIGKILL);
+
+    CloseKernel();
+}
+
+void CloseKernel()
+{
+    //Close FIFO
+    close(fpSysFifo);
+    close(fpIntFifo);
+    
+    //Close Shared Memory
+    shmctl(mainMemoryid, IPC_RMID, NULL);
+    
+    exit(0);
 }
