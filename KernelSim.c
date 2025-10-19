@@ -31,6 +31,7 @@ struct pcb
     int programCounter;
     int device;
     int operation;
+    int nRequest[NUM_DV];
 };
 
 static int fpSysFifo;
@@ -149,9 +150,9 @@ int RoundRobinScheduling()
 
         if (currentProcessData.status == READY)
         {
+            LoadContext(currentRunningProcess);
             printf("Running process %d\n", currentProcessData.pid);
             printf("PC: %d\n", currentProcessData.programCounter);
-            LoadContext(currentRunningProcess);
             kill(currentProcessData.pid, SIGCONT);
             currentRunningPid = currentProcessData.pid;
             processPCBs[currentRunningProcess].status = RUNNING;
@@ -173,6 +174,10 @@ void CreatePCB(int i)
 
     processPCBs[i].status = NEW;
     processPCBs[i].programCounter = 0;
+    for (int j = 0; j < NUM_DV; j++)
+    {
+        processPCBs[i].nRequest[j] = 0;
+    }
 }
 
 void CreateProcess(int i)
@@ -188,7 +193,7 @@ void CreateProcess(int i)
     }
     processPCBs[i].pid = pid;
     processPCBs[i].status = RUNNING;
-    currentRunningPid = pid;
+    LoadContext(i);
 }
 
 void ContinueCurrentProcess()
@@ -235,8 +240,8 @@ void LoadContext(int i)
 {
     //Load
     mainMemory->memoryId = i;
-    currentRunningPid = processPCBs[i].pid;
     mainMemory->programCounter = processPCBs[i].programCounter;
+    currentRunningPid = processPCBs[i].pid;
 }
 
 void interruptionHandler()
@@ -297,10 +302,11 @@ void syscallHandler()
     SysCall systemCall;
     read(fpSysFifo, &systemCall, sizeof(SysCall));
 
-    printf("System Call: %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.device);
+    printf("System Call: %d - %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.device, systemCall.operation);
     processPCBs[currentRunningProcess].status = BLOCKED;
     processPCBs[currentRunningProcess].device = systemCall.device;
     processPCBs[currentRunningProcess].operation = systemCall.operation;
+    processPCBs[currentRunningProcess].nRequest[systemCall.device - 1]++;
 
     Enqueue(DevicesQueues[systemCall.device - 1], currentRunningProcess);
     RoundRobinScheduling();
@@ -364,7 +370,7 @@ void stopHandler()
             message = "Blocked";
             break;
         case FINISHED:
-            message = "Blocked";
+            message = "Finished";
             break;
         }
 
@@ -400,6 +406,11 @@ void stopHandler()
             printf("Operation: %s\n", message);
         }
 
+        for (int j = 0; j < NUM_DV; j++)
+        {
+            printf("D%d - %d\n", j + 1, processPCBs[i].nRequest[j]);
+        }   
+
         printf("\n");
     }
 
@@ -409,8 +420,6 @@ void stopHandler()
 void continueHandler()
 {
     paused = False;
-
-    printf("Test\n");
 
     kill(interControllerPID, SIGCONT);
 

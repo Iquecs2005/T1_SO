@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <time.h>
 
 #include "Interruptions.h"
 
@@ -19,9 +20,18 @@ static int fpFIFO;
 void GenerateInterruption(int device);
 void stopHandler();
 
+void sleep_ms_nanosleep(int milliseconds) {
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+
+    nanosleep(&ts, NULL);
+}
+
 int main()
 {
     signal(SIGINT, stopHandler);
+    srand(time(NULL));
 
     KernelPID = getppid();
     
@@ -44,7 +54,7 @@ int main()
     
     while (access(FIFO, F_OK) != -1)
     {
-        sleep(1);
+        sleep_ms_nanosleep(500);
         
         //Generate IRQ0 / Time Slice
         GenerateInterruption(IRQ0);

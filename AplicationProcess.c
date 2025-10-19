@@ -6,13 +6,14 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/shm.h>
+#include <time.h>
 
 #include "Syscall.h"
 #include "ProcessData.h"
 
 #define OPENMODE (O_WRONLY)
 #define FIFO "SysCalls"
-#define MAX 1000
+#define MAX 10
 #define SYSCALLPROB 15
 
 static ProcessData* processData;
@@ -23,9 +24,19 @@ void generateSysCall(int device, int mode);
 void OnExecute();
 void stopHandler();
 
+
+void sleep_ms_nanosleep(int milliseconds) {
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+
+    nanosleep(&ts, NULL);
+}
+
 int main(int argc, char *argv[])
 {
     signal(SIGINT, stopHandler);
+    srand(time(NULL));
 
     if (argc < 2)
     {
@@ -60,21 +71,26 @@ int main(int argc, char *argv[])
 
     while (processData->programCounter < MAX)
     {
-        sleep(1);
+        sleep_ms_nanosleep(500);
         // generate a random syscall
         int d;
-        if (d = (rand() % 100) + 1 < SYSCALLPROB) 
+        if (d = rand() % 100 + 1 < SYSCALLPROB) 
         { 
             int Dx;
             int Op;            
             //if ((rand() % 100) + 1 < 51) 
-            if (d % 2)
+            if (rand() % 2 == 0)
                 Dx = D1;
             else 
                 Dx= D2;
-            if (d % 3 == 1) Op = R;
-            else if (d % 3 == 2) Op = W;
-            else Op = X;
+
+            int n = rand() % 3;
+            if (n == 1)
+                Op = R;
+            else if (n == 2) 
+                Op = W;
+            else 
+                Op = X;
             processData->programCounter++;
             generateSysCall(Dx, Op);
         }
@@ -82,6 +98,7 @@ int main(int argc, char *argv[])
         {
             processData->programCounter++;
         }
+        sleep_ms_nanosleep(500);
     }
 }
 
@@ -98,5 +115,5 @@ void generateSysCall(int device, int operation)
 
 void stopHandler() 
 {
-    
+
 }
