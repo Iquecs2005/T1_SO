@@ -7,8 +7,6 @@
 typedef struct processData ProcessData;
 struct processData
 {
-    int pid;
     int memoryId;
-    int status;
     int programCounter;
 };

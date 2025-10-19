@@ -35,6 +35,7 @@ static int fpSysFifo;
 static int fpIntFifo;
 
 static int mainMemoryid;
+static int currentRunningPid;
 static int currentRunningProcess = -1;
 static int nChild = NUM_AP;
 static int interControllerPID = 0;
@@ -47,6 +48,7 @@ static PCB processPCBs[NUM_AP];
 
 static Queue* DevicesQueues[NUM_DV];
 
+int CreatePipe(char* fifoName, int openMode);
 int RoundRobinScheduling();
 void CreatePCB(int i);
 void CreateProcess(int i);
@@ -74,44 +76,11 @@ int main(void)
 
     mainMemoryid = shmget(IPC_PRIVATE, sizeof(ProcessData), IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
     mainMemory = shmat(mainMemoryid, 0, 0);
-
-    if (access(FIFOSYS, F_OK) == -1)
-    {
-        int error;
-        if (error = mkfifo (FIFOSYS, S_IRUSR | S_IWUSR) != 0)
-        {
-            fprintf (stderr, "Erro ao criar FIFO %s %d\n", FIFOSYS, error);
-            perror("mkfifo failed");
-            return -1;
-        }
-        printf("Created Sys Fifo\n");
-    }
     
-    if (access(FIFOINT, F_OK) == -1)
-    {
-        int error;
-        if (error = mkfifo (FIFOINT, S_IRUSR | S_IWUSR) != 0)
-        {
-            fprintf (stderr, "Erro ao criar FIFO %s %d\n", FIFOINT, error);
-            perror("mkfifo failed");
-            return -1;
-        }
-        printf("Created Int Fifo\n");
-    }
+    fpSysFifo = CreatePipe(FIFOSYS, OPENMODESYS);
+    fpIntFifo = CreatePipe(FIFOINT, OPENMODEINT);
     
-    if ((fpSysFifo = open (FIFOSYS, OPENMODESYS)) < 0)
-    {
-        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOSYS);
-        return -2;
-    }
-    
-    if ((fpIntFifo = open (FIFOINT, OPENMODEINT)) < 0)
-    {
-        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFOINT);
-        return -2;
-    }
-    
-    mainMemory->pid = -1;
+    currentRunningPid = -1;
     for (int i = 0; i < NUM_AP; i++) 
     {
         processPCBs[i].pid = -1; 
@@ -129,6 +98,30 @@ int main(void)
         pause();
 
     return 0;
+}
+
+int CreatePipe(char* fifoName, int openMode)
+{
+    if (access(fifoName, F_OK) == -1)
+    {
+        int error;
+        if (error = mkfifo (fifoName, S_IRUSR | S_IWUSR) != 0)
+        {
+            fprintf (stderr, "Erro ao criar FIFO %s %d\n", fifoName, error);
+            perror("mkfifo failed");
+            return -1;
+        }
+    }
+
+    int pipeId = open (fifoName, openMode);
+
+    if (pipeId < 0)
+    {
+        fprintf (stderr, "Erro ao abrir a FIFO %s\n", fifoName);
+        return -2;
+    }
+
+    return pipeId;
 }
 
 int RoundRobinScheduling()
@@ -157,7 +150,7 @@ int RoundRobinScheduling()
             printf("PC: %d\n", currentProcessData.programCounter);
             LoadContext(currentRunningProcess);
             kill(currentProcessData.pid, SIGCONT);
-            mainMemory->pid = currentProcessData.pid;
+            currentRunningPid = currentProcessData.pid;
             processPCBs[currentRunningProcess].status = RUNNING;
             return 0;
         }
@@ -192,8 +185,7 @@ void CreateProcess(int i)
     }
     processPCBs[i].pid = pid;
     processPCBs[i].status = RUNNING;
-    mainMemory->pid = pid;
-    mainMemory->status = RUNNING;
+    currentRunningPid = pid;
 }
 
 void ContinueCurrentProcess()
@@ -216,16 +208,16 @@ void ContinueCurrentProcess()
 void StopCurrentProcess()
 {
     //Stop current process from running
-    if (mainMemory->pid == -1)
+    if (currentRunningPid == -1)
         return;
 
-    kill(mainMemory->pid, SIGSTOP);
+    kill(currentRunningPid, SIGSTOP);
     SaveContext();
 }
 
 void SaveContext()
 {
-    if (mainMemory->pid == -1)
+    if (currentRunningPid == -1)
         return;
 
     PCB currentProcessData = processPCBs[mainMemory->memoryId];
@@ -233,14 +225,14 @@ void SaveContext()
     //Save
     processPCBs[currentRunningProcess].programCounter = mainMemory->programCounter;
     processPCBs[currentRunningProcess].status = READY;
-    mainMemory->pid = -1;
+    currentRunningPid = -1;
 }
 
 void LoadContext(int i)
 {
     //Load
     mainMemory->memoryId = i;
-    mainMemory->pid = processPCBs[i].pid;
+    currentRunningPid = processPCBs[i].pid;
     mainMemory->programCounter = processPCBs[i].programCounter;
 }
 
