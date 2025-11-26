@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "Queue.h"
@@ -63,4 +64,14 @@ int pop(Queue* queue)
     queue->start = queue->start->next;
 
     return pid;
+}
+
+void printQueue(Queue* queue)
+{
+    Node* currentNode = queue->start;
+    while (currentNode != NULL)
+    {
+        printf("PID: %d\n", currentNode->pid);
+        currentNode = currentNode->next;
+    }
 }

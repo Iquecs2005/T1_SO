@@ -1,5 +1,6 @@
 .vscode/settings.json
-*[^.]
 AplicationProcess
 InterControllerSim
 KernelSim
+Interuptions
+SysCalls

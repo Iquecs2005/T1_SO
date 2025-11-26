@@ -4,3 +4,4 @@ Queue* CreateQueue();
 char IsEmpty(Queue* queue);
 void Enqueue(Queue* queue, int pid);
 int pop(Queue* queue);
+void printQueue(Queue* queue);
