@@ -1,3 +1,4 @@
 gcc -o AplicationProcess Aplications/AplicationProcess.c
 gcc -o KernelSim Kernel/KernelSim.c Kernel/Queue.c
 gcc -o Interuptions Interruption/InterControllerSim.c
+gcc -o FileSys FileSystem/SFSS.c
