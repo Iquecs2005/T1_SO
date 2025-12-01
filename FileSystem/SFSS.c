@@ -8,13 +8,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define BUFSIZE 1024
+#include "FileOperations.h"
+#include "ServerFormating.h"
+
 #define MAXPATHSIZE 64
 
 void error(char *msg);
-int parse (char *buf, int *cmd, char *name);
-void TreatRequest(char* buf, int size);
-char** GetParameters(char* buf, int* size);
+char* TreatRequest(char* buf);
 
 int main(int argc, char **argv) 
 {
@@ -24,13 +24,11 @@ int main(int argc, char **argv)
   struct sockaddr_in serveraddr; /* server's addr */
   struct sockaddr_in clientaddr; /* client addr */
   struct hostent *hostp; /* client host info */
-  char buf[BUFSIZE]; /* message buf */
   char *hostaddrp; /* dotted decimal host addr string */
   int optval; /* flag value for setsockopt */
   int n; /* message byte size */
-
-  char name[BUFSIZE];   // name of the file received from client
-  int cmd;              // cmd received from client
+  
+  char buf[BufferSize()]; /* message buf */
 
   /*
    * check command line arguments
@@ -82,13 +80,13 @@ int main(int argc, char **argv)
     /*
      * recvfrom: receive a UDP datagram from a client
      */
-    bzero(buf, BUFSIZE);
-    n = recvfrom(sockfd, buf, BUFSIZE, 0,
+    bzero(buf, BufferSize());
+    n = recvfrom(sockfd, buf, BufferSize(), 0,
 		 (struct sockaddr *) &clientaddr, &clientlen);
     if (n < 0)
       error("ERROR in recvfrom");
   
-    TreatRequest(buf, n);
+    char* reply = TreatRequest(buf);
 
     /*
      * gethostbyaddr: determine who sent the datagram
@@ -102,15 +100,16 @@ int main(int argc, char **argv)
       error("ERROR on inet_ntoa\n");
     printf("server received datagram from %s (%s)\n",
 	   hostp->h_name, hostaddrp);
-    printf("server received %d/%d bytes: %s\n", strlen(buf), n, buf);
 
     /*
      * sendto: echo the input back to the client
      */
-    n = sendto(sockfd, buf, strlen(buf), 0,
+    n = sendto(sockfd, reply, BufferSize(), 0,
 	       (struct sockaddr *) &clientaddr, clientlen);
     if (n < 0)
       error("ERROR in sendto");
+
+    free(reply);
   }
 }
 
@@ -120,86 +119,153 @@ void error(char *msg)
   exit(1);
 }
 
-int parse (char *buf, int *cmd, char *name) {
-    char *cmdstr;
-
-    cmdstr = strtok(buf,";");
-        name = strtok(NULL,"\0");
-    cmd = atoi(cmdstr);
-}
-
-void TreatRequest(char* buf, int size)
+char* TreatRequest(char* buf)
 {
-  if (size < 2)
-      return;
-  
-  char operation = buf[0];
-  int owner = (int)(buf[1] - '0');
-
-  if (owner > 5 || owner < 1)
-      return;
-
-  int size;
-  char** parameters = GetParameters(buf, &size);
-
-  for (int i = 0; i < size; i++)
+  if (strcmp(buf, "RD-REQ") == 0)
   {
-    printf("%s\n", parameters[i]);
-  }
-
-  switch (operation)
-  {
-  case 'r':
     printf("Read Request\n");
-    printf("Buf: %s\n", buf);
     
-    break;
-  case 'R':
-    printf("Read Data Request\n");
-    printf("%d\n", owner);
-    break;
-  case 'w':
+    char* prefix;
+    int owner;
+    char* path;
+    int pathlen;
+    char* payload;
+    int offset;
+
+    RequestDeformat1(buf, &prefix, &owner, &path, &pathlen, &payload, &offset);
+    printf("%s %d %s %d %s %d\n", prefix, owner, path, pathlen, payload, offset);
+
+    unsigned char* buffer = (unsigned char*)malloc(sizeof(char) * 16);
+    int status = ReadOperation(owner, path, pathlen, buffer, offset);
+
+    if (status != 0)
+      offset = status;
+
+    char* reply = RequestFormat1("RD-REP", owner, path, pathlen, buffer, offset);
+
+    free(prefix);
+    free(path);
+    free(payload);
+
+    return reply;
+  }
+  else if (strcmp(buf, "WR-REQ") == 0)
+  {
     printf("Write Request\n");
-    printf("%d\n", owner);
-    break;
-  case 'W':
-    printf("Write Data Request\n");
-    printf("%d\n", owner);
-    break;
-  default:
-      break;
+
+    char* prefix;
+    int owner;
+    char* path;
+    int pathlen;
+    char* payload;
+    int offset;
+
+    RequestDeformat1(buf, &prefix, &owner, &path, &pathlen, &payload, &offset);
+    printf("%s %d %s %d %s %d\n", prefix, owner, path, pathlen, payload, offset);
+
+    int status = WriteOperation(owner, path, pathlen, payload, offset);
+
+    if (status != 0)
+      offset = status;
+
+    char* reply = RequestFormat1("WR-REP", owner, path, pathlen, "", offset);
+
+    return reply;
   }
-}
-
-char** GetParameters(char* buf, int* size)
-{
-  int nTokens = 0;
-  char* copy;
-
-  copy = (char*)malloc(sizeof(char) * strlen(buf));
-  strcpy(copy, buf);
-  
-  char* token = strtok(copy, ";");
-
-  while (token != NULL) 
+  else if (strcmp(buf, "DC-REQ") == 0)
   {
-    nTokens++;
-    token = strtok(NULL, ";");
+    printf("Create Directory Request\n");
+
+    char* prefix;
+    int owner;
+    char* path;
+    int pathlen;
+    char* dirname;
+    int dirlen;
+
+    RequestDeformat1(buf, &prefix, &owner, &path, &pathlen, &dirname, &dirlen);
+    printf("%s %d %s %d %s %d\n", prefix, owner, path, pathlen, dirname, dirlen);
+
+    int status = DirCreateOperation(owner, path, pathlen, dirname, dirlen);
+
+    if (status != 0)
+    {
+      dirlen = status;
+    }
+    else
+    {
+      char* newPath = (char*)malloc(sizeof(char) * (strlen(path) + strlen(dirname)));
+      strcpy(newPath, path);
+      strcat(newPath, dirname);
+      free(path);
+      path = newPath;
+      pathlen = strlen(path);
+    }
+
+    char* reply = RequestFormat2("DC-REP", owner, path, pathlen);
+
+    free(prefix);
+    free(path);
+    free(dirname);
+
+    return reply;
   }
-
-  free(copy);
-  copy = (char*)malloc(sizeof(char) * strlen(buf));
-  strcpy(copy, buf);
-
-  char** tokensList = (char**)malloc(nTokens * sizeof(char*));
-
-  tokensList[0] = strtok(buf, ";");
-  for (int i = 1; i < nTokens; i++) 
+  else if (strcmp(buf, "DR-REQ") == 0)
   {
-    tokensList[i] = strtok(NULL, ";");
+    printf("Directory Remove Request\n");
+
+    char* prefix;
+    int owner;
+    char* path;
+    int pathlen;
+    char* dirname;
+    int dirlen;
+
+    RequestDeformat1(buf, &prefix, &owner, &path, &pathlen, &dirname, &dirlen);
+    printf("%s %d %s %d %s %d\n", prefix, owner, path, pathlen, dirname, dirlen);
+
+    int status = DirRemoveOperation(owner, path, pathlen, dirname, dirlen);
+
+    if (status != 0)
+    {
+      pathlen = status;
+    }
+
+    char* reply = RequestFormat2("DR-REP", owner, path, pathlen);
+
+    free(prefix);
+    free(path);
+    free(dirname);
+
+    return reply;
+  }
+  else if (strcmp(buf, "DL-REQ") == 0)
+  {
+    printf("Directory List Request\n");
+
+    char* prefix;
+    int owner;
+    char* path;
+    int pathlen;
+
+    RequestDeformat2(buf, &prefix, &owner, &path, &pathlen);
+    printf("%s %d %s %d\n", prefix, owner, path, pathlen);
+
+    FileEntry* filesEntrys;
+    int nFiles;
+    char* allfilesnames = DirListOperation(owner, path, pathlen, &filesEntrys, &nFiles);
+
+    printf("NFiles: %d\n", nFiles);
+    char* message = RequestFormat3("DL-REP", owner, allfilesnames, filesEntrys, nFiles);
+    
+    free(prefix);
+    free(allfilesnames);
+    free(filesEntrys);
+
+    return message;
   }
 
-  *size = nTokens;
-
-  return tokensList;
+  char* reply = (char*)malloc(BufferSize());
+  reply[0] = '\0';
+  return reply;
 }

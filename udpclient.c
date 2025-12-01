@@ -10,8 +10,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h> 
-
-#define BUFSIZE 1024
+#include "FileSystem/ServerFormating.h"
 
 /* 
  * error - wrapper for perror
@@ -21,13 +20,13 @@ void error(char *msg) {
     exit(0);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv) 
+{
     int sockfd, portno, n;
     int serverlen;
     struct sockaddr_in serveraddr;
     struct hostent *server;
     char *hostname;
-    char buf[BUFSIZE];
 
     /* check command line arguments */
     if (argc != 3) {
@@ -60,19 +59,38 @@ int main(int argc, char **argv) {
     //bzero(buf, BUFSIZE);
     //printf("Please enter msg: ");
     //fgets(buf, BUFSIZE, stdin);
-    strcpy(buf, "r2;Alo Mundo;10\n");
+    
+    char* buf = RequestFormat2("DL-REQ", 2, "/", strlen("/"));
+    
     //printf("%s\n", buf);
-
+    
     /* send the message to the server */
     serverlen = sizeof(serveraddr);
-    n = sendto(sockfd, buf, strlen(buf), 0, &serveraddr, serverlen);
+    n = sendto(sockfd, buf, BufferSize(), 0, &serveraddr, serverlen);
     if (n < 0) 
-      error("ERROR in sendto");
+    error("ERROR in sendto");
     
     /* print the server's reply */
-    n = recvfrom(sockfd, buf, strlen(buf), 0, &serveraddr, &serverlen);
+    n = recvfrom(sockfd, buf, BufferSize(), 0, &serveraddr, &serverlen);
     if (n < 0) 
-      error("ERROR in recvfrom");
-    printf("Echo from server: %s", buf);
+    error("ERROR in recvfrom");
+    
+    char* prefix;
+    int owner;
+    char* allFilesNames;
+    FileEntry fileEntries[40];
+    int nFiles;
+    
+    RequestDeformat3(buf, &prefix, &owner, &allFilesNames, fileEntries, &nFiles);
+    printf("%s %d %s %d\n", prefix, owner, allFilesNames, nFiles);
+    for (int i = 0; i < nFiles; i++)
+    {
+      printf("%d, %d, %d\n", fileEntries[i].startIndex, fileEntries[i].endIndex, fileEntries[i].isSubdirectory);
+    }
+
+    free(buf);
+    free(prefix);
+    free(allFilesNames);
+
     return 0;
-}
+  }
