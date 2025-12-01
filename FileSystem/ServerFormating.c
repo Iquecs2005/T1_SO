@@ -76,7 +76,6 @@ char* RequestFormat3(char* prefix, int owner, char* allfilenames, FileEntry* fst
         currentIndex += FileIndexToBuffer(fstlstpositions[i], buffer + currentIndex);
     }
     currentIndex += IntToBuffer(nrnames, buffer + currentIndex);
-    printf("%d\n", nrnames);
 
     return buffer;
 }
@@ -91,10 +90,8 @@ void RequestDeformat3(char* buffer, char** prefix, int* owner, char** allfilenam
     for (int i = 0; i < 40; i++)
     {
         currentIndex += BufferToFileIndex(fstlstpositions + i, buffer + currentIndex);
-        printf("AB %d\n", currentIndex);
     }
     currentIndex += BufferToInt(buffer + currentIndex, nrnames);
-    printf("%d\n", *nrnames);
 }
 
 int BufferSize()

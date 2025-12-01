@@ -250,7 +250,7 @@ int RemoveDirectoryElements(char* dirName)
     if(count <= 0)
     {
         printf("No files in this directiory\n");
-        return INCORRECTPATH;
+        return 0;
     }
 
     for(int i = 1; i < count + 1; ++i)
