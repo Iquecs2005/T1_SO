@@ -19,8 +19,9 @@
 static ProcessData* processData;
 static int kernelPID;
 static int fpFIFO;
+static char words[4][17] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
 
-void generateSysCall(int device, int mode);
+void generateSysCall(int device, int operation, char* payload, int offset);
 void OnExecute();
 void stopHandler();
 
@@ -77,22 +78,36 @@ int main(int argc, char *argv[])
         if (d = rand() % 100 + 1 < SYSCALLPROB) 
         { 
             int Dx;
-            int Op;            
+            int Op;  
+            char payload[17] = '';
+            int offset = 0;          
             //if ((rand() % 100) + 1 < 51) 
             if (rand() % 2 == 0)
+            {
                 Dx = D1;
+                int n = rand() % 2;
+                if (n == 1)
+                    Op = R;
+                else
+                    Op = W;
+                    int word = (rand() % 4) - 1;
+                    payload = words[word];
+                int off = (rand() % 7) - 1;
+                offset = off * 16;
+            }
             else 
-                Dx= D2;
-
-            int n = rand() % 3;
-            if (n == 1)
-                Op = R;
-            else if (n == 2) 
-                Op = W;
-            else 
-                Op = X;
+            {
+                Dx = D2;
+                int n = rand() % 3;
+                if (n == 1)
+                    Op = A;
+                else if (n == 2) 
+                    Op = D;
+                else if (n == 3)
+                    Op = L;
+            }
             processData->programCounter++;
-            generateSysCall(Dx, Op);
+            generateSysCall(Dx, Op, payload, offset);
         }
         else
         {
@@ -102,12 +117,14 @@ int main(int argc, char *argv[])
     }
 }
 
-void generateSysCall(int device, int operation)
+void generateSysCall(int device, int operation, char* payload, int offset)
 {
     SysCall currentSysCall;
     currentSysCall.id = processData->memoryId;
     currentSysCall.device = device;
     currentSysCall.operation = operation;
+    currentSysCall.playload = payload;
+    currentSysCall.offset = offset;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
     kill(kernelPID, SIGUSR2);
     return;

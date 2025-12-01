@@ -2,7 +2,9 @@
 #define D2 2
 #define R 1
 #define W 2
-#define X 3
+#define A 3
+#define D 4
+#define L 5
 
 typedef struct syscall SysCall;
 struct syscall
@@ -10,4 +12,6 @@ struct syscall
     int id;
     int device;
     int operation;
+    char playload[17];
+    int offset;
 };
