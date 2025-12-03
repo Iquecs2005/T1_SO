@@ -75,30 +75,32 @@ int main(int argc, char *argv[])
         sleep_ms_nanosleep(500);
         // generate a random syscall
         int d;
-        if (d = rand() % 100 + 1 < SYSCALLPROB) 
+        if ((d = rand() % 100 + 1) < SYSCALLPROB) 
         { 
             int Dx;
             int Op;  
-            char payload[17] = '';
+            char payload[17] = "";
             int offset = 0;          
             //if ((rand() % 100) + 1 < 51) 
             if (rand() % 2 == 0)
             {
                 Dx = D1;
-                int n = rand() % 2;
+                int n = rand() % 2 + 1;
                 if (n == 1)
                     Op = R;
                 else
+                {
                     Op = W;
-                    int word = (rand() % 4) - 1;
-                    payload = words[word];
-                int off = (rand() % 7) - 1;
+                    int word = rand() % 4;
+                    strcpy(payload, words[word]);
+                }
+                int off = rand() % 7;
                 offset = off * 16;
             }
             else 
             {
                 Dx = D2;
-                int n = rand() % 3;
+                int n = rand() % 3 + 1;
                 if (n == 1)
                     Op = A;
                 else if (n == 2) 
@@ -123,7 +125,7 @@ void generateSysCall(int device, int operation, char* payload, int offset)
     currentSysCall.id = processData->memoryId;
     currentSysCall.device = device;
     currentSysCall.operation = operation;
-    currentSysCall.playload = payload;
+    currentSysCall.payload = payload;
     currentSysCall.offset = offset;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
     kill(kernelPID, SIGUSR2);
