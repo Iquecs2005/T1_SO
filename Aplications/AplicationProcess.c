@@ -19,8 +19,10 @@
 static ProcessData* processData;
 static int kernelPID;
 static int fpFIFO;
-static char words[4][17] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
+static char* words[] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
 static char* paths[] = {"/alo.txt", "/subdir/atum.txt", "/HollowKnight.txt"};
+static char* dirs[] = {"/dir1", "/subdir2", "/dir/subdir3"};
+static char* dirNames[] = {"dir1", "subdir2", "dir/subdir3"};
 
 void generateSysCall(int device, int operation, char* payload, int offset);
 void OnExecute();
@@ -81,7 +83,9 @@ int main(int argc, char *argv[])
             int Dx;
             int Op;  
             char payload[17] = "";
-            int offset = 0;          
+            int offset = 0;  
+            char path[81];     
+            char dirName[81] = "";   
             //if ((rand() % 100) + 1 < 51) 
             if (rand() % 2 == 0)
             {
@@ -97,6 +101,7 @@ int main(int argc, char *argv[])
                 }
                 int off = rand() % 7;
                 offset = off * 16;
+                path = paths[rand() % 3];
             }
             else 
             {
@@ -108,6 +113,8 @@ int main(int argc, char *argv[])
                     Op = D;
                 else if (n == 3)
                     Op = L;
+                path = dirs[rand() % 3];
+                dirName = dirNames[rand() % 4];
             }
             processData->programCounter++;
             generateSysCall(Dx, Op, payload, offset);
@@ -120,14 +127,15 @@ int main(int argc, char *argv[])
     }
 }
 
-void generateSysCall(int device, int operation, char* payload, int offset)
+void generateSysCall(int device, int operation, char* payload, char* dirName, char* path, int offset)
 {
     SysCall currentSysCall;
     currentSysCall.id = processData->memoryId;
     currentSysCall.device = device;
     currentSysCall.operation = operation;
     strcpy(currentSysCall.payload, payload);
-    strcpy(currentSysCall.path, paths[rand() % 3]);
+    strcpy(currentSysCall.path, path);
+    strcpy(currentSysCall.dirName, dirName);
     currentSysCall.offset = offset;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
     kill(kernelPID, SIGUSR2);

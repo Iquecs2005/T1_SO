@@ -15,4 +15,5 @@ struct syscall
     char payload[17];
     int offset;
     char path[81];
+    char dirName[81];
 };

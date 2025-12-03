@@ -373,23 +373,25 @@ void syscallHandler()
     processPCBs[currentRunningProcess].nRequest[systemCall.device - 1]++;
     //chamar aqui
 
+    IOResponse response;
     switch (systemCall.operation)
     {
     case R:
-        IOResponse response;
         ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, &response);
         printf("Coisas: %d\n", response.offset);
         break;
     case W:
-        IOResponse response;
         WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &response);
         printf("Coisas: %d\n", response.offset);
         break;
     case A:
+        CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
         break;
     case D:
+        RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
         break;
     case L:
+        ListDir(currentRunningProcess+1, systemCall.path, &response);
         break;
     }
 
