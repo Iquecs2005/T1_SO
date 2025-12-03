@@ -12,6 +12,7 @@ struct syscall
     int id;
     int device;
     int operation;
-    char playload[17];
+    char payload[17];
     int offset;
+    char path[81];
 };

@@ -9,7 +9,8 @@
 #include <sys/wait.h>
 
 #include "../Aplications/ProcessData.h"
-#include "../Inter/Interruptions.h"
+#include "../InterFolder/Interruptions.h"
+#include "../FileSystem/SFSSClient.h"
 #include "Syscall.h"
 #include "Queue.h"
 
@@ -25,11 +26,11 @@
 
 enum requestType 
 {
-    read,
-    write,
-    create,
-    delete,
-    listAll
+    requestRead,
+    requestWrite,
+    requestCreate,
+    requestDelete,
+    requestListAll
 };
 
 typedef struct request REQ;
@@ -86,6 +87,7 @@ static int mainMemoryid;
 static int currentRunningPid;
 static int currentRunningProcess = -1;
 static int nChild = NUM_AP;
+static int sfssPID = 0;
 static int interControllerPID = 0;
 
 static char paused = False;
@@ -135,6 +137,14 @@ int main(void)
         processPCBs[i].pid = -1; 
     }
     
+    //Create SFSS process
+    sfssPID = fork();
+    if (sfssPID == 0)
+    {
+        execlp("./FileSys", "./FileSys", "3999", NULL);
+    }
+    EstabilishConnection("Localhost", 3999);
+
     //Create InterControllerSim process
     interControllerPID = fork();
     if (interControllerPID == 0)
@@ -251,6 +261,7 @@ void ContinueCurrentProcess()
     {
         LoadContext(currentRunningProcess);
         kill(currentPCB.pid, SIGCONT);
+        //chamar a funcao de reply
         processPCBs[currentRunningProcess].status = RUNNING;
         return;
     }
@@ -301,7 +312,12 @@ void interruptionHandler()
     int readStatus = read(fpIntFifo, &interuption, sizeof(Interruption));
 
     if (readStatus == -1)
+    {
         printf("ReadError\n");
+        printf("Read status %d\n", readStatus);
+        return;
+    }
+
 
     while (readStatus > 0)
     {
@@ -322,6 +338,7 @@ void interruptionHandler()
     }
     if (interruptions[2])
     {
+        //todo
         //directory operation
         printf("D2 Interruption\n");
         int id = pop(DevicesQueues[1]);
@@ -354,6 +371,27 @@ void syscallHandler()
     processPCBs[currentRunningProcess].device = systemCall.device;
     processPCBs[currentRunningProcess].operation = systemCall.operation;
     processPCBs[currentRunningProcess].nRequest[systemCall.device - 1]++;
+    //chamar aqui
+
+    switch (systemCall.operation)
+    {
+    case R:
+        IOResponse response;
+        ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, &response);
+        printf("Coisas: %d\n", response.offset);
+        break;
+    case W:
+        IOResponse response;
+        WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &response);
+        printf("Coisas: %d\n", response.offset);
+        break;
+    case A:
+        break;
+    case D:
+        break;
+    case L:
+        break;
+    }
 
     Enqueue(DevicesQueues[systemCall.device - 1], currentRunningProcess);
 

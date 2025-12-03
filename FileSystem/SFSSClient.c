@@ -23,63 +23,63 @@ void error(char *msg)
     exit(0);
 }
 
-int main(int argc, char **argv) 
-{
-  if (argc != 3) 
-  {
-    fprintf(stderr,"usage: %s <hostname> <port>\n", argv[0]);
-    exit(0);
-  }
-  hostname = argv[1];
-  portno = atoi(argv[2]);
+// int main(int argc, char **argv) 
+// {
+//   if (argc != 3) 
+//   {
+//     fprintf(stderr,"usage: %s <hostname> <port>\n", argv[0]);
+//     exit(0);
+//   }
+//   hostname = argv[1];
+//   portno = atoi(argv[2]);
 
-  EstabilishConnection(hostname, portno);
+//   EstabilishConnection(hostname, portno);
 
-  IOResponse response;
-  ReadFile(2, "/Alo Mundo.txt", 0, &response);
+//   IOResponse response;
+//   ReadFile(2, "/Alo Mundo.txt", 0, &response);
 
-  printf("%s, %d, %s, %d, %s, %d\n", response.prefix, response.owner, response.path, response.pathlen, response.payload, response.offset);
+//   printf("%s, %d, %s, %d, %s, %d\n", response.prefix, response.owner, response.path, response.pathlen, response.payload, response.offset);
 
-  free(response.prefix);
-  free(response.path);
-  free(response.payload);
+//   free(response.prefix);
+//   free(response.path);
+//   free(response.payload);
 
-  WriteFile(2, "/Alo Mundo.txt", "aaaaaaaaaaaaaaaa", 16, &response);
+//   WriteFile(2, "/Alo Mundo.txt", "aaaaaaaaaaaaaaaa", 16, &response);
 
-  printf("%s, %d, %s, %d, %s, %d\n", response.prefix, response.owner, response.path, response.pathlen, response.payload, response.offset);
+//   printf("%s, %d, %s, %d, %s, %d\n", response.prefix, response.owner, response.path, response.pathlen, response.payload, response.offset);
 
-  free(response.prefix);
-  free(response.path);
-  free(response.payload);
+//   free(response.prefix);
+//   free(response.path);
+//   free(response.payload);
 
-  DirResponse dirResponse;
-  CreateDir(2, "/", "c", &dirResponse);
+//   DirResponse dirResponse;
+//   CreateDir(2, "/", "c", &dirResponse);
 
-  printf("%s, %d, %s, %d\n", dirResponse.prefix, dirResponse.owner, dirResponse.path, dirResponse.pathlen);
+//   printf("%s, %d, %s, %d\n", dirResponse.prefix, dirResponse.owner, dirResponse.path, dirResponse.pathlen);
 
-  free(dirResponse.prefix);
-  free(dirResponse.path);
+//   free(dirResponse.prefix);
+//   free(dirResponse.path);
 
-  RemoveDir(2, "/", "c", &dirResponse);
+//   RemoveDir(2, "/", "c", &dirResponse);
 
-  printf("%s, %d, %s, %d\n", dirResponse.prefix, dirResponse.owner, dirResponse.path, dirResponse.pathlen);
+//   printf("%s, %d, %s, %d\n", dirResponse.prefix, dirResponse.owner, dirResponse.path, dirResponse.pathlen);
 
-  free(dirResponse.prefix);
-  free(dirResponse.path);
+//   free(dirResponse.prefix);
+//   free(dirResponse.path);
 
-  ListDirResponse listDirResp;
-  ListDir(2, "/", &listDirResp);
-  printf("%s %d %s %d\n", listDirResp.prefix, listDirResp.owner, listDirResp.allFilesNames, listDirResp.nrNames);
-  for (int i = 0; i < listDirResp.nrNames; i++)
-  {
-    printf("%d, %d, %d\n", listDirResp.fstlstpositions[i].startIndex, listDirResp.fstlstpositions[i].endIndex, listDirResp.fstlstpositions[i].isSubdirectory);
-  }
+//   ListDirResponse listDirResp;
+//   ListDir(2, "/", &listDirResp);
+//   printf("%s %d %s %d\n", listDirResp.prefix, listDirResp.owner, listDirResp.allFilesNames, listDirResp.nrNames);
+//   for (int i = 0; i < listDirResp.nrNames; i++)
+//   {
+//     printf("%d, %d, %d\n", listDirResp.fstlstpositions[i].startIndex, listDirResp.fstlstpositions[i].endIndex, listDirResp.fstlstpositions[i].isSubdirectory);
+//   }
 
-  free(listDirResp.prefix);
-  free(listDirResp.allFilesNames);
+//   free(listDirResp.prefix);
+//   free(listDirResp.allFilesNames);
 
-  return 0;
-}
+//   return 0;
+// }
 
 int EstabilishConnection(char* localHostname, int portN)
 {

@@ -20,6 +20,7 @@ static ProcessData* processData;
 static int kernelPID;
 static int fpFIFO;
 static char words[4][17] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
+static char* paths[] = {"/alo.txt", "/subdir/atum.txt", "/HollowKnight.txt"};
 
 void generateSysCall(int device, int operation, char* payload, int offset);
 void OnExecute();
@@ -125,7 +126,8 @@ void generateSysCall(int device, int operation, char* payload, int offset)
     currentSysCall.id = processData->memoryId;
     currentSysCall.device = device;
     currentSysCall.operation = operation;
-    currentSysCall.payload = payload;
+    strcpy(currentSysCall.payload, payload);
+    strcpy(currentSysCall.path, paths[rand() % 3]);
     currentSysCall.offset = offset;
     write(fpFIFO, &currentSysCall, sizeof(SysCall));
     kill(kernelPID, SIGUSR2);
