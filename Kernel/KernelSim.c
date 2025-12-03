@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 
 #include "../Aplications/ProcessData.h"
-#include "../Interruptions/Interruptions.h"
+#include "../Inter/Interruptions.h"
 #include "Syscall.h"
 #include "Queue.h"
 
@@ -23,6 +23,50 @@
 #define True 1
 #define False 0
 
+enum requestType 
+{
+    read,
+    write,
+    create,
+    delete,
+    listAll
+};
+
+typedef struct request REQ;
+struct request
+{
+    enum requestType type;
+    char filePath[257];
+    int offset;
+    int active;
+};
+
+typedef struct reply REP;
+struct reply
+{
+    enum requestType type;
+    int result;
+    char data[17];
+    int active;
+};
+
+typedef struct openFile OF;
+struct openFile
+{
+    char filePath[257];
+    int currentPos;
+    int isOpen;
+};
+
+typedef struct processState PS;
+struct processState
+{
+    char directory[257];
+    OF openFiles[100];
+    REQ request;
+    REP reply;
+};
+
 typedef struct pcb PCB;
 struct pcb
 {
@@ -31,6 +75,7 @@ struct pcb
     int programCounter;
     int device;
     int operation;
+    PS processState;
     int nRequest[NUM_DV];
 };
 
@@ -266,6 +311,7 @@ void interruptionHandler()
 
     if (interruptions[1])
     {
+        //file operation
         printf("D1 Interruption\n");
         int id = pop(DevicesQueues[0]);
         if (id != -1)
@@ -276,6 +322,7 @@ void interruptionHandler()
     }
     if (interruptions[2])
     {
+        //directory operation
         printf("D2 Interruption\n");
         int id = pop(DevicesQueues[1]);
         if (id != -1)
@@ -405,8 +452,14 @@ void stopHandler()
             case W:
                 message = "Write";
                 break;
-            case X:
-                message = "X";
+            case A:
+                message = "Add";
+                break;
+            case D:
+                message = "Delete";
+                break;
+            case L:
+                message = "List";
                 break;
             }
 
