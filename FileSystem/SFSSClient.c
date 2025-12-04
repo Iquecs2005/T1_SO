@@ -236,6 +236,8 @@ int RemoveDir(int owner, char* path, char* dirname, DirResponse* response)
   
   RequestDeformat2(buf, &(response->prefix), &(response->owner), &(response->path), &(response->pathlen));
 
+  printf("%s, %d, %s, %d\n", response->prefix, response->owner, response->path, response->pathlen);
+
   free(buf);
 
   return 0;
@@ -267,6 +269,12 @@ int ListDir(int owner, char* path, ListDirResponse* response)
   }
   
   RequestDeformat3(buf, &(response->prefix), &(response->owner), &(response->allFilesNames), &(response->fstlstpositions), &(response->nrNames));
+
+  printf("%s %d %s %d\n", response->prefix, response->owner, response->allFilesNames, response->nrNames);
+  for (int i = 0; i < response->nrNames; i++)
+  {
+    printf("%d, %d, %d\n", response->fstlstpositions[i].startIndex, response->fstlstpositions[i].endIndex, response->fstlstpositions[i].isSubdirectory);
+  }
 
   free(buf);
 

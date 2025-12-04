@@ -19,7 +19,7 @@
 #define DIRNAMESSIZE 3
 
 static char* words[] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
-static char* paths[] = {"/alo.txt", "/subdir/atum.txt", "/HollowKnight.txt"};
+static char* paths[] = {"/alo.txt", "/atum.txt", "/HollowKnight.txt"};
 static char* dirs[] = {"/", "/", "/dir1"};
 static char* dirNames[] = {"dir1", "subdir2", "subdir3"};
 
@@ -43,6 +43,7 @@ int main(int argc, char *argv[])
         // generate a random syscall
         increasePC();
         int d;
+
         if ((d = rand() % 100 + 1) < SYSCALLPROB) 
         { 
             int value = rand() % 5;
@@ -50,14 +51,14 @@ int main(int argc, char *argv[])
             switch (value)
             {
             case 0:
-                sysWrite(paths[rand() % PATHSIZE], words[rand() % PAYLOADSIZE], 16 * (rand() % 10));
+                sysWrite(paths[rand() % PATHSIZE], words[rand() % PAYLOADSIZE], 16 * (rand() % 3));
                 break;
             case 1:
                 char buffer[17];
-                sysRead(paths[rand() % PATHSIZE], &buffer, 16 * (rand() % 10));
+                sysRead(paths[rand() % PATHSIZE], &buffer, 16 * (rand() % 3));
                 break;
             case 2:
-                sysAdd(dirs[rand() % DIRSIZE], dirNames[rand() % DIRNAMESSIZE]);
+                free(sysAdd(dirs[rand() % DIRSIZE], dirNames[rand() % DIRNAMESSIZE]));
                 break;
             case 3:
                 sysRemove(dirs[rand() % DIRSIZE], dirNames[rand() % DIRNAMESSIZE]);

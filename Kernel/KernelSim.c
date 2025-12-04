@@ -389,35 +389,87 @@ void syscallHandler()
     IOResponse response;
     switch (systemCall.operation)
     {
-        case R:
+    case R:
         device = 1;
         processPCBs[currentRunningProcess].processState.reply.type = requestRead;
         IOResponse* readResponse = &processPCBs[currentRunningProcess].processState.reply.response.io;
         ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, readResponse);
+
+        printf("Results\n");
+        printf("%s, %d, %s, %d, %s, %d\n", readResponse->prefix, readResponse->owner, readResponse->path, readResponse->pathlen, readResponse->payload, readResponse->offset);
+
+        memcpy(processPCBs[currentRunningProcess].syscallResponse, readResponse->payload, 16);
+
+        free(readResponse->prefix);
+        free(readResponse->path);
+        free(readResponse->payload);
         break;
-        case W:
+    case W:
         device = 1;
         processPCBs[currentRunningProcess].processState.reply.type = requestWrite;
         IOResponse* writeResponse = &processPCBs[currentRunningProcess].processState.reply.response.io;
-        WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &writeResponse);
+        WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, writeResponse);
+
+        printf("Results\n");
+        printf("%s, %d, %s, %d, %s, %d\n", writeResponse->prefix, writeResponse->owner, writeResponse->path, writeResponse->pathlen, writeResponse->payload, writeResponse->offset);
+
+        free(writeResponse->prefix);
+        free(writeResponse->path);
+        free(writeResponse->payload);
         break;
-        case A:
+    case A:
         device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestCreate;
         DirResponse* addResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &addResponse);
+        CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, addResponse);
+
+        printf("Results\n");
+        printf("%s, %d, %s, %d\n", addResponse->prefix, addResponse->owner, addResponse->path, addResponse->pathlen);
+
+        processPCBs[currentRunningProcess].syscallResponse[0] = '\0';
+        strcpy(processPCBs[currentRunningProcess].syscallResponse, addResponse->path);
+
+        free(addResponse->prefix);
+        free(addResponse->path);
         break;
-        case D:
+    case D:
         device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestDelete;
         DirResponse* removeResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &removeResponse);
+        RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, removeResponse);
+
+        printf("Results\n");
+        printf("%s, %d, %s, %d\n", removeResponse->prefix, removeResponse->owner, removeResponse->path, removeResponse->pathlen);
+        
+        memcpy(processPCBs[currentRunningProcess].syscallResponse, &(removeResponse->pathlen), 4);
+        
+        printf("before Segfault\n");
+        free(removeResponse->prefix);
+        free(removeResponse->path);
         break;
-        case L:
+    case L:
         device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestListAll;
-        ListDirResponse* listResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        ListDir(currentRunningProcess+1, systemCall.path, &listResponse);
+        ListDirResponse* listResponse = &processPCBs[currentRunningProcess].processState.reply.response.list;
+        ListDir(currentRunningProcess+1, systemCall.path, listResponse);
+
+        printf("Results\n");
+        printf("%s %d %s %d\n", listResponse->prefix, listResponse->owner, listResponse->allFilesNames, listResponse->nrNames);
+        for (int i = 0; i < listResponse->nrNames; i++)
+        {
+            printf("%d, %d, %d\n", listResponse->fstlstpositions[i].startIndex, listResponse->fstlstpositions[i].endIndex, listResponse->fstlstpositions[i].isSubdirectory);
+        }
+
+        int len1;
+        processPCBs[currentRunningProcess].syscallResponse[0] = '\0';
+        strcpy(processPCBs[currentRunningProcess].syscallResponse, listResponse->allFilesNames);
+        int index = strlen(processPCBs[currentRunningProcess].syscallResponse); 
+        memcpy(processPCBs[currentRunningProcess].syscallResponse + index, listResponse->fstlstpositions, sizeof(FileEntry) * 40);
+        index += sizeof(FileEntry) * 40;
+        memcpy(processPCBs[currentRunningProcess].syscallResponse + index, &(listResponse->nrNames), 4);
+
+        free(listResponse->prefix);
+        free(listResponse->allFilesNames);
         break;
     }
 

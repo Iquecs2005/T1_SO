@@ -100,6 +100,10 @@ void sysRead(char* path, char* buffer, int offset)
     while (!processData->doneTransferring);
 
     memcpy(buffer, processData->syscallResponse, 16);
+
+    printf("Read return: %s\n", buffer);
+
+    printf("%s", buffer);
 }
 
 char* sysAdd(char* path, char* dirname)
@@ -120,6 +124,8 @@ char* sysAdd(char* path, char* dirname)
 
     char* newpath = (char*)malloc(sizeof(char) * 256);
     strcpy(newpath, processData->syscallResponse);
+
+    printf("Add return: %s\n", newpath);
 
     return newpath;
 }
@@ -142,6 +148,8 @@ int sysRemove(char* path, char* dirname)
 
     int len1;
     memcpy(&len1, processData->syscallResponse, 4);
+
+    printf("Remove return: %d\n", len1);
 
     return len1;
 }
@@ -167,6 +175,8 @@ void sysListDir(char* path, char* alldirinfo, FileEntry* fstlstpositions, int* n
     memcpy(fstlstpositions, processData->syscallResponse + index, sizeof(FileEntry) * 40);
     index += sizeof(FileEntry) * 40;
     memcpy(&len1, processData->syscallResponse + index, 4);
+
+    printf("Remove return: %s\n", alldirinfo);
 }
 
 void stopHandler() 

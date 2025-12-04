@@ -1,0 +1,54 @@
+﻿Nome: João Miguel Rodrigues Montenegro da Franca
+Matrícula: 2411289
+
+
+Nome: Henrique Carvalho e Silva
+Matrícula: 2410365
+
+
+Comando compilação:
+
+
+gcc -o AplicationProcess Aplications/AplicationProcess.c -w
+
+gcc -o KernelSim Kernel/KernelSim.c Kernel/Queue.c FileSystem/SFSSClient.c FileSystem/ServerFormating.c -w
+
+gcc -o InterControllerSim InterFolder/InterControllerSim.c -w
+
+gcc -o FileSys FileSystem/SFSS.c FileSystem/FileOperations.c FileSystem/ServerFormating.c -w
+
+
+AplicationProcess
+
+
+Assim como no T1, cada AplicationProcess recebe o id da memória compartilhada com o KernelSim, que acessa para descobrir as informações do processo (como o program counter por exemplo), carregadas pelo KernelSim durante a troca de contexto. A AP então fica em loop, dormindo e gerando um número aleatório para ver se realiza uma chamada do sistema. Caso gere, irá escrever as informações sobre a syscall no pipe de syscalls aberto com KernelSim e enviar um sinal (SIGUSR2) para o mesmo.
+
+
+Porém agora, a syscall recebe um payload e um offset (usados nas operações de arquivos). Além disso, ao gerar uma syscall e ser escolhido se é no dispositivo 1 ou 2, o tipo de operação requisitada também muda, com read e write sendo escolhidas quando a syscall ocorre no dispositivo 1 (dispositivo referente às operações com arquivos) e add, delete e listAll sendo escolhidas quando é no dispositivo 2 (referente às operações com diretórios). Ao gerar uma chamada de read/write é escolhido um offset para passar como parâmetro na chamada em KernelSim, escrevendo ele no pipe e na operação de write é escolhida aleatoriamente uma string entre um array para ser o texto a ser escrito na chamada de sistema de write, com a string também sendo escrita no pipe. Também é escolhido e escrito o caminho do arquivo a ser lido/escrito e no caso de operações com diretórios, o caminho do diretório e o nome a ser adicionado/removido e escrito no pipe também.
+
+
+
+
+InterControllerSim
+
+
+Não foram feitas modificações em InterControllerSim em relação à sua implementação no T1, apenas com a forma que as interrupções são tratadas em KernelSim sendo alterada, com o IQR1 representando as interrupções em operações de arquivo e o IQR2 representando as de diretório.
+
+
+
+
+KernelSim
+
+
+O KernelSim agora solicita uma operação ao SFSS ao receber uma system call de acordo com o tipo recebido, além de salvar a reply recebida de cada AplicationProcess, junto de seu tipo e se a resposta já foi processada ou se está na fila de espera de seu respectivo IQR. Além disso é salvo também qualquer arquivo que é aberto pela primeira vez por uma AplicationProcess junto da posição atual sendo lida. Agora, ao parar a execução de KernelSim com Ctrl+C são exibidos os arquivos abertos por cada processo e a posição em que eles pararam de ler além da última reply recebida junto de seu estado (esperando na fila ou não).
+
+
+
+
+FileSystem
+
+
+O FileSystem recebe requisições de um cliente através de datagramas UDP e, ao receber um pedido, identifica o tipo da operação solicitada (leitura, escrita, criação de diretório, remoção de diretório ou listagem). Cada requisição é deformatada para extrair suas informações (prefixo, dono, caminho, payload, etc.) e, conforme o tipo, o servidor executa a operação correspondente no sistema de arquivos virtual. Após executar a operação, o servidor formata uma resposta contendo o status e os dados resultantes (quando aplicável), e envia essa reply de volta ao cliente que fez o pedido. Ele também trata dinamicamente cada operação recebida interpretando o conteúdo da mensagem, em seguida executando a função apropriada (ReadOperation, WriteOperation, DirCreateOperation, DirRemoveOperation ou DirListOperation), e enfim produz uma mensagem de resposta compatível com o protocolo definido pelas funções de formatação.
+Além disso, para operações que retornam listas de arquivos ou dados lidos, o servidor aloca buffers temporários e controla sua liberação, garantindo que cada reply seja construída corretamente e enviada ao cliente.
+O servidor permanece ativo em um loop infinito aguardando novas requisições. Ele exibe no terminal o endereço do cliente que enviou cada datagrama e o tipo de operação solicitada.
+Quando o servidor é interrompido (Ctrl+C), todas as alocações são liberadas automaticamente pelo término do processo (não há estado persistente mantido após o encerramento), pois o FileSystem é totalmente stateless, cada requisição é independente e não há armazenamento interno entre chamadas.
