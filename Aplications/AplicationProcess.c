@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
     {
         sleep_ms_nanosleep(500);
         // generate a random syscall
+        increasePC();
         int d;
         if ((d = rand() % 100 + 1) < SYSCALLPROB) 
         { 
@@ -69,7 +70,6 @@ int main(int argc, char *argv[])
                 break;
             }
         }
-        increasePC();
 
         sleep_ms_nanosleep(500);
     }

@@ -80,6 +80,8 @@ struct pcb
 {
     int pid;
     int status;
+    char doneTransferring;
+    char syscallResponse[1024];
     int programCounter;
     int device;
     int operation;
@@ -255,6 +257,7 @@ void CreateProcess(int i)
     }
     processPCBs[i].pid = pid;
     processPCBs[i].status = RUNNING;
+    processPCBs[i].doneTransferring = 0;
     LoadContext(i);
 }
 
@@ -296,6 +299,8 @@ void SaveContext()
     //Save
     processPCBs[currentRunningProcess].programCounter = mainMemory->programCounter;
     processPCBs[currentRunningProcess].status = READY;
+    processPCBs[currentRunningProcess].doneTransferring = mainMemory->doneTransferring;
+    memcpy(processPCBs->syscallResponse, mainMemory->syscallResponse, sizeof(char) * 1024);
     currentRunningPid = -1;
 }
 
@@ -304,6 +309,8 @@ void LoadContext(int i)
     //Load
     mainMemory->memoryId = i;
     mainMemory->programCounter = processPCBs[i].programCounter;
+    mainMemory->doneTransferring = processPCBs[i].doneTransferring;
+    memcpy(mainMemory->syscallResponse, processPCBs->syscallResponse, sizeof(char) * 1024);
     currentRunningPid = processPCBs[i].pid;
 }
 
@@ -373,44 +380,51 @@ void syscallHandler()
     SysCall systemCall;
     read(fpSysFifo, &systemCall, sizeof(SysCall));
 
-    printf("System Call: %d - %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.device, systemCall.operation);
+    printf("System Call: %d - %d\n", processPCBs[currentRunningProcess].pid, systemCall.operation);
     processPCBs[currentRunningProcess].status = BLOCKED;
-    processPCBs[currentRunningProcess].device = systemCall.device;
     processPCBs[currentRunningProcess].operation = systemCall.operation;
-    processPCBs[currentRunningProcess].nRequest[systemCall.device - 1]++;
     //chamar aqui
-
+    
+    int device = 0;
     IOResponse response;
     switch (systemCall.operation)
     {
-    case R:
+        case R:
+        device = 1;
         processPCBs[currentRunningProcess].processState.reply.type = requestRead;
-        IOResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.io;
-        ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, response);
+        IOResponse* readResponse = &processPCBs[currentRunningProcess].processState.reply.response.io;
+        ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, readResponse);
         break;
-    case W:
+        case W:
+        device = 1;
         processPCBs[currentRunningProcess].processState.reply.type = requestWrite;
-        IOResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.io;
-        WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &response);
+        IOResponse* writeResponse = &processPCBs[currentRunningProcess].processState.reply.response.io;
+        WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &writeResponse);
         break;
-    case A:
+        case A:
+        device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestCreate;
-        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
+        DirResponse* addResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
+        CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &addResponse);
         break;
-    case D:
+        case D:
+        device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestDelete;
-        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
+        DirResponse* removeResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
+        RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &removeResponse);
         break;
-    case L:
+        case L:
+        device = 2;
         processPCBs[currentRunningProcess].processState.reply.type = requestListAll;
-        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
-        ListDir(currentRunningProcess+1, systemCall.path, &response);
+        ListDirResponse* listResponse = &processPCBs[currentRunningProcess].processState.reply.response.dir;
+        ListDir(currentRunningProcess+1, systemCall.path, &listResponse);
         break;
     }
 
-    Enqueue(DevicesQueues[systemCall.device - 1], currentRunningProcess);
+    processPCBs[currentRunningProcess].device = device;
+    processPCBs[currentRunningProcess].nRequest[device - 1]++;
+    
+    Enqueue(DevicesQueues[device - 1], currentRunningProcess);
 
     for (int i = 0; i < NUM_DV; i++)
     {

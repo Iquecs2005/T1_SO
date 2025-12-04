@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/shm.h>
 
 #include "../Aplications/ProcessData.h"
 
@@ -56,17 +57,19 @@ void initialize(int argc, char *argv[])
 
 int getPC()
 {
-    return processData->memoryId;
+    return processData->programCounter;
 }
 
 void increasePC()
 {
-    processData->memoryId++;
+    processData->programCounter++;
 }
 
 void sysWrite(char* path, char* payload, int offset)
 {
     SysCall currentSysCall;
+
+    processData->doneTransferring = 0;
 
     currentSysCall.operation = W;
     currentSysCall.id = processData->memoryId;
@@ -78,14 +81,14 @@ void sysWrite(char* path, char* payload, int offset)
     kill(kernelPID, SIGUSR2);
 
     while (!processData->doneTransferring);
-
-    processData->doneTransferring = 0;
 }
 
 void sysRead(char* path, char* buffer, int offset)
 {
     SysCall currentSysCall;
 
+    processData->doneTransferring = 0;
+    
     currentSysCall.operation = R;
     currentSysCall.id = processData->memoryId;
     strcpy(currentSysCall.path, path);
@@ -97,13 +100,13 @@ void sysRead(char* path, char* buffer, int offset)
     while (!processData->doneTransferring);
 
     memcpy(buffer, processData->syscallResponse, 16);
-
-    processData->doneTransferring = 0;
 }
 
 char* sysAdd(char* path, char* dirname)
 {
     SysCall currentSysCall;
+
+    processData->doneTransferring = 0;
 
     currentSysCall.operation = A;
     currentSysCall.id = processData->memoryId;
@@ -115,17 +118,17 @@ char* sysAdd(char* path, char* dirname)
 
     while (!processData->doneTransferring);
 
-    char* path = (char*)malloc(sizeof(char) * 256);
-    strcpy(path, processData->syscallResponse);
+    char* newpath = (char*)malloc(sizeof(char) * 256);
+    strcpy(newpath, processData->syscallResponse);
 
-    processData->doneTransferring = 0;
-
-    return path;
+    return newpath;
 }
 
 int sysRemove(char* path, char* dirname)
 {
     SysCall currentSysCall;
+
+    processData->doneTransferring = 0;
 
     currentSysCall.operation = D;
     currentSysCall.id = processData->memoryId;
@@ -140,14 +143,14 @@ int sysRemove(char* path, char* dirname)
     int len1;
     memcpy(&len1, processData->syscallResponse, 4);
 
-    processData->doneTransferring = 0;
-
     return len1;
 }
 
 void sysListDir(char* path, char* alldirinfo, FileEntry* fstlstpositions, int* nNames)
 {
     SysCall currentSysCall;
+
+    processData->doneTransferring = 0;
 
     currentSysCall.operation = L;
     currentSysCall.id = processData->memoryId;
@@ -164,8 +167,6 @@ void sysListDir(char* path, char* alldirinfo, FileEntry* fstlstpositions, int* n
     memcpy(fstlstpositions, processData->syscallResponse + index, sizeof(FileEntry) * 40);
     index += sizeof(FileEntry) * 40;
     memcpy(&len1, processData->syscallResponse + index, 4);
-
-    processData->doneTransferring = 0;
 }
 
 void stopHandler() 
