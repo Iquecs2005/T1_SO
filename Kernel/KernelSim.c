@@ -37,6 +37,7 @@ typedef struct request REQ;
 struct request
 {
     enum requestType type;
+    
     char filePath[257];
     int offset;
     int active;
@@ -46,6 +47,12 @@ typedef struct reply REP;
 struct reply
 {
     enum requestType type;
+    union responseData
+    {
+        IOResponse io;
+        DirResponse dir;
+        ListDirResponse list;
+    } response;
     int result;
     char data[17];
     int active;
@@ -377,20 +384,28 @@ void syscallHandler()
     switch (systemCall.operation)
     {
     case R:
-        ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, &response);
-        printf("Coisas: %d\n", response.offset);
+        processPCBs[currentRunningProcess].processState.reply.type = requestRead;
+        IOResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.io;
+        ReadFile(currentRunningProcess+1, systemCall.path, systemCall.offset, response);
         break;
     case W:
+        processPCBs[currentRunningProcess].processState.reply.type = requestWrite;
+        IOResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.io;
         WriteFile(currentRunningProcess+1, systemCall.path, systemCall.payload, systemCall.offset, &response);
-        printf("Coisas: %d\n", response.offset);
         break;
     case A:
+        processPCBs[currentRunningProcess].processState.reply.type = requestCreate;
+        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
         CreateDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
         break;
     case D:
+        processPCBs[currentRunningProcess].processState.reply.type = requestDelete;
+        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
         RemoveDir(currentRunningProcess+1, systemCall.path, systemCall.dirName, &response);
         break;
     case L:
+        processPCBs[currentRunningProcess].processState.reply.type = requestListAll;
+        DirResponse* response = &processPCBs[currentRunningProcess].processState.reply.response.dir;
         ListDir(currentRunningProcess+1, systemCall.path, &response);
         break;
     }
