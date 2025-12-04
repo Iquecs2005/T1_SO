@@ -9,25 +9,19 @@
 #include <time.h>
 
 #include "../Kernel/Syscall.h"
-#include "ProcessData.h"
 
-#define OPENMODE (O_WRONLY)
-#define FIFO "SysCalls"
 #define MAX 10
 #define SYSCALLPROB 15
 
-static ProcessData* processData;
-static int kernelPID;
-static int fpFIFO;
+#define PAYLOADSIZE 4
+#define PATHSIZE 3
+#define DIRSIZE 3
+#define DIRNAMESSIZE 3
+
 static char* words[] = {"aaaaaaaaaaaaaaaa", "henriquecarvalho", "joaomiguelfranca", "hollowknightsilk"};
 static char* paths[] = {"/alo.txt", "/subdir/atum.txt", "/HollowKnight.txt"};
-static char* dirs[] = {"/dir1", "/subdir2", "/dir/subdir3"};
-static char* dirNames[] = {"dir1", "subdir2", "dir/subdir3"};
-
-void generateSysCall(int device, int operation, char* payload, int offset);
-void OnExecute();
-void stopHandler();
-
+static char* dirs[] = {"/", "/", "/dir1"};
+static char* dirNames[] = {"dir1", "subdir2", "subdir3"};
 
 void sleep_ms_nanosleep(int milliseconds) {
     struct timespec ts;
@@ -39,110 +33,44 @@ void sleep_ms_nanosleep(int milliseconds) {
 
 int main(int argc, char *argv[])
 {
-    signal(SIGINT, stopHandler);
+    initialize(argc, argv);
+
     srand(time(NULL));
 
-    if (argc < 2)
-    {
-        perror("No PID in program call\n");
-        return -1;
-    }
-    
-    kernelPID = getppid();
-    int processPid;
-    sscanf(argv[1], "%d", &processPid);
-
-    //Anexa a memoria compartilhada criada pelo nucleo contendo as informações do processo
-    void* sharedMemPointer = shmat(processPid, NULL, NULL);
-    if (sharedMemPointer == -1)
-    {
-        perror("Couldn't open shared memory");
-        exit(1);
-    }
-    processData = (ProcessData*) sharedMemPointer;
-
-    if (access(FIFO, F_OK) == -1)
-    {
-        fprintf (stderr, "Erro: FIFO de SystemCalls não pode ser acessada\n");
-        return -1;
-    }
-
-    if ((fpFIFO = open (FIFO, OPENMODE)) < 0)
-    {
-        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFO);
-        return -2;
-    }
-
-    while (processData->programCounter < MAX)
+    while (getPC() < MAX)
     {
         sleep_ms_nanosleep(500);
         // generate a random syscall
         int d;
         if ((d = rand() % 100 + 1) < SYSCALLPROB) 
         { 
-            int Dx;
-            int Op;  
-            char payload[17] = "";
-            int offset = 0;  
-            char path[81];     
-            char dirName[81] = "";   
-            //if ((rand() % 100) + 1 < 51) 
-            if (rand() % 2 == 0)
+            int value = rand() % 5;
+
+            switch (value)
             {
-                Dx = D1;
-                int n = rand() % 2 + 1;
-                if (n == 1)
-                    Op = R;
-                else
-                {
-                    Op = W;
-                    int word = rand() % 4;
-                    strcpy(payload, words[word]);
-                }
-                int off = rand() % 7;
-                offset = off * 16;
-                path = paths[rand() % 3];
+            case 0:
+                sysWrite(paths[rand() % PATHSIZE], words[rand() % PAYLOADSIZE], 16 * (rand() % 10));
+                break;
+            case 1:
+                char buffer[17];
+                sysRead(paths[rand() % PATHSIZE], &buffer, 16 * (rand() % 10));
+                break;
+            case 2:
+                sysAdd(dirs[rand() % DIRSIZE], dirNames[rand() % DIRNAMESSIZE]);
+                break;
+            case 3:
+                sysRemove(dirs[rand() % DIRSIZE], dirNames[rand() % DIRNAMESSIZE]);
+                break;
+            case 4:
+                char dirNames[256];
+                FileEntry files[40];
+                int nNames;
+                sysListDir(dirs[rand() % DIRSIZE], dirNames, files, &nNames);
+                break;
             }
-            else 
-            {
-                Dx = D2;
-                int n = rand() % 3 + 1;
-                if (n == 1)
-                    Op = A;
-                else if (n == 2) 
-                    Op = D;
-                else if (n == 3)
-                    Op = L;
-                path = dirs[rand() % 3];
-                dirName = dirNames[rand() % 4];
-            }
-            processData->programCounter++;
-            generateSysCall(Dx, Op, payload, offset);
         }
-        else
-        {
-            processData->programCounter++;
-        }
+        increasePC();
+
         sleep_ms_nanosleep(500);
     }
-}
-
-void generateSysCall(int device, int operation, char* payload, char* dirName, char* path, int offset)
-{
-    SysCall currentSysCall;
-    currentSysCall.id = processData->memoryId;
-    currentSysCall.device = device;
-    currentSysCall.operation = operation;
-    strcpy(currentSysCall.payload, payload);
-    strcpy(currentSysCall.path, path);
-    strcpy(currentSysCall.dirName, dirName);
-    currentSysCall.offset = offset;
-    write(fpFIFO, &currentSysCall, sizeof(SysCall));
-    kill(kernelPID, SIGUSR2);
-    return;
-}
-
-void stopHandler() 
-{
-
 }

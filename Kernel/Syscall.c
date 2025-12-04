@@ -1,0 +1,174 @@
+#include "Syscall.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+
+#include "../Aplications/ProcessData.h"
+
+#define OPENMODE (O_WRONLY)
+#define FIFO "SysCalls"
+
+static int processPid = -1;
+static int kernelPID = -1;
+static int fpFIFO = -1;
+static ProcessData* processData = NULL;
+
+void stopHandler();
+
+void initialize(int argc, char *argv[])
+{
+    if (argc < 2)
+    {
+        perror("No PID in program call\n");
+        return -1;
+    }
+    
+    sscanf(argv[1], "%d", &processPid);
+
+    signal(SIGINT, stopHandler);
+
+    kernelPID = getppid();
+
+    void* sharedMemPointer = shmat(processPid, NULL, NULL);
+    if (sharedMemPointer == -1)
+    {
+        perror("Couldn't open shared memory");
+        exit(1);
+    }
+    processData = (ProcessData*) sharedMemPointer;
+
+    if (access(FIFO, F_OK) == -1)
+    {
+        fprintf (stderr, "Erro: FIFO de SystemCalls não pode ser acessada\n");
+        return -1;
+    }
+
+    if ((fpFIFO = open (FIFO, OPENMODE)) < 0)
+    {
+        fprintf (stderr, "Erro ao abrir a FIFO %s\n", FIFO);
+        return -2;
+    }
+}
+
+int getPC()
+{
+    return processData->memoryId;
+}
+
+void increasePC()
+{
+    processData->memoryId++;
+}
+
+void sysWrite(char* path, char* payload, int offset)
+{
+    SysCall currentSysCall;
+
+    currentSysCall.operation = W;
+    currentSysCall.id = processData->memoryId;
+    strcpy(currentSysCall.path, path);
+    strcpy(currentSysCall.payload, payload);
+    currentSysCall.offset = offset;
+
+    write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(kernelPID, SIGUSR2);
+
+    while (!processData->doneTransferring);
+
+    processData->doneTransferring = 0;
+}
+
+void sysRead(char* path, char* buffer, int offset)
+{
+    SysCall currentSysCall;
+
+    currentSysCall.operation = R;
+    currentSysCall.id = processData->memoryId;
+    strcpy(currentSysCall.path, path);
+    currentSysCall.offset = offset;
+
+    write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(kernelPID, SIGUSR2);
+
+    while (!processData->doneTransferring);
+
+    memcpy(buffer, processData->syscallResponse, 16);
+
+    processData->doneTransferring = 0;
+}
+
+char* sysAdd(char* path, char* dirname)
+{
+    SysCall currentSysCall;
+
+    currentSysCall.operation = A;
+    currentSysCall.id = processData->memoryId;
+    strcpy(currentSysCall.path, path);
+    strcpy(currentSysCall.dirName, dirname);
+
+    write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(kernelPID, SIGUSR2);
+
+    while (!processData->doneTransferring);
+
+    char* path = (char*)malloc(sizeof(char) * 256);
+    strcpy(path, processData->syscallResponse);
+
+    processData->doneTransferring = 0;
+
+    return path;
+}
+
+int sysRemove(char* path, char* dirname)
+{
+    SysCall currentSysCall;
+
+    currentSysCall.operation = D;
+    currentSysCall.id = processData->memoryId;
+    strcpy(currentSysCall.path, path);
+    strcpy(currentSysCall.dirName, dirname);
+
+    write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(kernelPID, SIGUSR2);
+
+    while (!processData->doneTransferring);
+
+    int len1;
+    memcpy(&len1, processData->syscallResponse, 4);
+
+    processData->doneTransferring = 0;
+
+    return len1;
+}
+
+void sysListDir(char* path, char* alldirinfo, FileEntry* fstlstpositions, int* nNames)
+{
+    SysCall currentSysCall;
+
+    currentSysCall.operation = L;
+    currentSysCall.id = processData->memoryId;
+    strcpy(currentSysCall.path, path);
+
+    write(fpFIFO, &currentSysCall, sizeof(SysCall));
+    kill(kernelPID, SIGUSR2);
+
+    while (!processData->doneTransferring);
+
+    int len1;
+    strcpy(alldirinfo, processData->syscallResponse);
+    int index = strlen(alldirinfo); 
+    memcpy(fstlstpositions, processData->syscallResponse + index, sizeof(FileEntry) * 40);
+    index += sizeof(FileEntry) * 40;
+    memcpy(&len1, processData->syscallResponse + index, 4);
+
+    processData->doneTransferring = 0;
+}
+
+void stopHandler() 
+{
+
+}
